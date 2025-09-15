@@ -11,7 +11,7 @@ async fn scrape_in_webview(app: tauri::AppHandle, url: String) -> Result<(), Str
         w
     } else {
         WebviewWindowBuilder::new(&app, label, WebviewUrl::App("blank.html".into()))
-            .visible(true)
+            .visible(false)
             .title("Scraper")
             .build()
             .map_err(|e| e.to_string())?
@@ -34,84 +34,36 @@ async fn scrape_in_webview(app: tauri::AppHandle, url: String) -> Result<(), Str
         println!("Starting to poll for page content...");
 
         // Poll for up to 30 seconds
-        for attempt in 1..=60 {
-            if let Some(w) = ah.get_webview_window(&win_label) {
-                let js = r#"
-                    (function() {
-                        if (document.readyState === 'complete' &&
-                            window.location.href !== 'about:blank' &&
-                            document.title !== '') {
-                            return {
-                                ready: true,
-                                title: document.title,
-                                html: document.documentElement.outerHTML,
-                                cookies: document.cookie,
-                                url: window.location.href
-                            };
-                        } else {
-                            return { ready: false, readyState: document.readyState, url: window.location.href };
-                        }
-                    })();
-                "#;
+        if let Some(w) = ah.get_webview_window(&win_label) {
+            // For now, let's just wait and try a direct extraction
+            let extract_js = r#"
+                window.__TAURI__.core.invoke("handle_scrape_result", {
+                    html: document.documentElement.outerHTML,
+                });
+            "#;
 
-                match w.eval(js) {
-                    Ok(_) => {
-                        println!("Polling attempt {}: JavaScript executed", attempt);
-                        // For now, let's just wait and try a direct extraction
-                        if attempt >= 10 { // After 10 attempts (5 seconds), try extraction
-                            let extract_js = r#"
-                                JSON.stringify({
-                                    title: document.title,
-                                    html: document.documentElement.outerHTML.substring(0, 1000) + "...",
-                                    cookies: document.cookie,
-                                    url: window.location.href,
-                                    readyState: document.readyState
-                                });
-                            "#;
-
-                            match w.eval(extract_js) {
-                                Ok(_) => {
-                                    println!("Extraction JavaScript executed on attempt {}", attempt);
-                                    // Emit a success event with some basic data
-                                    let _ = ah.emit("scraper:result", serde_json::json!({
-                                        "title": "Page loaded successfully",
-                                        "html": "<html>Content extracted via polling</html>",
-                                        "cookies": "",
-                                        "url": &url
-                                    }));
-                                    break;
-                                }
-                                Err(e) => {
-                                    println!("Extraction JavaScript failed: {}", e);
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        println!("Polling JavaScript failed on attempt {}: {}", attempt, e);
-                    }
+            match w.eval(extract_js) {
+                Ok(_) => {
+                    println!("Extraction JavaScript executed");
                 }
-            } else {
-                println!("Webview window not found during polling");
-                break;
+                Err(e) => {
+                    println!("Extraction JavaScript failed: {}", e);
+                }
             }
-
-            tokio::time::sleep(Duration::from_millis(500)).await;
+        } else {
+            println!("Webview window not found during polling");
         }
 
-        println!("Polling completed");
+        tokio::time::sleep(Duration::from_millis(500)).await;
     });
 
     Ok(())
 }
 
 #[tauri::command]
-async fn handle_scrape_result(app: tauri::AppHandle, title: String, html: String, cookies: String) -> Result<(), String> {
-    println!("handle_scrape_result called with title: {}", title);
+async fn handle_scrape_result(app: tauri::AppHandle, html: String) -> Result<(), String> {
     let _ = app.emit("scraper:result", serde_json::json!({
-        "title": title,
         "html": html,
-        "cookies": cookies
     }));
     Ok(())
 }
