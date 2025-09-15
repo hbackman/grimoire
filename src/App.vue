@@ -25,12 +25,18 @@
         :description="addon.description"
         class="mb-3"
       />
+
+      <!-- Loading more indicator -->
+      <AddonSkeleton
+        v-if="loadingMore"
+        class="mb-3"
+      />
     </template>
   </main>
 </template>
 
 <script setup>
-import {onMounted, watch} from "vue";
+import {onMounted, watch, onUnmounted} from "vue";
 import {ref}              from "vue";
 import {browse}           from "@/lib/curseforge.js";
 import Addon              from "@/components/Addon.vue";
@@ -40,18 +46,59 @@ import Search             from "@/components/Search.vue";
 const addons = ref([]);
 const search = ref("");
 const loading = ref(false);
+const loadingMore = ref(false);
+const currentPage = ref(1);
+const hasMoreResults = ref(true);
 
 let debounceTimer = null;
 
-const performSearch = async () => {
-  loading.value = true;
+const performSearch = async (resetResults = true) => {
+  if (resetResults) {
+    loading.value = true;
+    currentPage.value = 1;
+    hasMoreResults.value = true;
+  } else {
+    loadingMore.value = true;
+  }
+
   try {
-    const results = await browse(1, 20, search.value || undefined);
-    addons.value = results;
+    const results = await browse(currentPage.value, 20, search.value || undefined);
+
+    if (resetResults) {
+      addons.value = results;
+    } else {
+      addons.value = [...addons.value, ...results];
+    }
+
+    // If we got fewer results than requested, we've reached the end
+    hasMoreResults.value = results.length === 20;
+
   } catch (error) {
     console.error("Search error:", error);
   } finally {
     loading.value = false;
+    loadingMore.value = false;
+  }
+};
+
+const loadMore = async () => {
+  if (loadingMore.value || loading.value || !hasMoreResults.value) {
+    return;
+  }
+
+  currentPage.value++;
+  await performSearch(false);
+};
+
+// Scroll detection for infinite scroll
+const handleScroll = () => {
+  const scrollHeight = document.documentElement.scrollHeight;
+  const scrollTop = document.documentElement.scrollTop;
+  const clientHeight = document.documentElement.clientHeight;
+
+  // Trigger load more when user is 200px from bottom
+  if (scrollTop + clientHeight >= scrollHeight - 200) {
+    loadMore();
   }
 };
 
@@ -60,11 +107,19 @@ watch(search, () => {
     clearTimeout(debounceTimer);
   }
 
-  debounceTimer = setTimeout(performSearch, 300);
+  debounceTimer = setTimeout(() => performSearch(true), 300);
 }, { immediate: false });
 
 onMounted(() => {
-  performSearch();
+  performSearch(true);
+  window.addEventListener('scroll', handleScroll);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll);
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
 });
 </script>
 
