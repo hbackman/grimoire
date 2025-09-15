@@ -26,14 +26,23 @@ export async function scrape(url) {
   if (unlistenErr) unlistenErr();
 
   return data;
-}
+};
 
-export async function browse(page = 1, size = 20) {
-  const url = `https://www.curseforge.com/wow/search?page=${page}&pageSize=${size}&sortBy=relevancy&class=addons`;
-  const data = await scrape(url);
-  const root = parse(data.html);
-
-  return root.querySelectorAll(".project-card")
+/**
+ * Extract addons from a given HTML string. This does the heavy lefting
+ * of scraping the relevant information from the Curseforge response.
+ *
+ * @param {string} html
+ *
+ * @returns {{
+ *  image: string,
+ *  name: string,
+ *  description: string,
+ *  author: string,
+ * }[]}
+ */
+async function extractAddonsFromHtml(html) {
+  return parse(html).querySelectorAll(".project-card")
     .map(e => {
       return {
         image:       e.querySelector(".art img").getAttribute("src"),
@@ -42,4 +51,13 @@ export async function browse(page = 1, size = 20) {
         author:      e.querySelector(".author").text.trim(),
       };
     });
-}
+};
+
+export async function browse(page = 1, size = 20, search) {
+  const data = await scrape(
+    search
+      ? `https://www.curseforge.com/wow/search?page=${page}&pageSize=${size}&sortBy=relevancy&search=${search}`
+      : `https://www.curseforge.com/wow/search?page=${page}&pageSize=${size}&sortBy=relevancy&class=addons`
+  );
+  return extractAddonsFromHtml(data.html);
+};
