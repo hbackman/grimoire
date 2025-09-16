@@ -21,7 +21,7 @@
         :key="addon.name"
         :image="addon.image"
         :author="addon.author"
-        :name="addon.name"
+        :title="addon.title"
         :description="addon.description"
         class="mb-3"
       />

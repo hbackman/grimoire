@@ -36,7 +36,7 @@ export async function scrape(url) {
  *
  * @returns {{
  *  image: string,
- *  name: string,
+ *  title: string,
  *  description: string,
  *  author: string,
  * }[]}
@@ -46,7 +46,7 @@ async function extractAddonsFromHtml(html) {
     .map(e => {
       return {
         image:       e.querySelector(".art img").getAttribute("src"),
-        name:        e.querySelector(".name").text.trim(),
+        title:       e.querySelector(".name").text.trim(),
         description: e.querySelector(".description").text.trim(),
         author:      e.querySelector(".author").text.trim(),
       };

@@ -2,7 +2,8 @@
   <div class="flex items-start gap-3 rounded-xl bg-white p-3 shadow ring-1 ring-black/5
              dark:bg-zinc-900 dark:ring-white/10
              hover:ring-2 hover:ring-blue-500
-             transition-all duration-200 ease-in-out">
+             transition-all duration-200 ease-in-out
+             cursor-pointer">
     <img
       :src="image"
       class="h-14 w-14 flex-shrink-0 rounded-md object-cover"
@@ -10,7 +11,7 @@
 
     <div class="flex flex-col">
       <h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-        {{ name }}
+        {{ title }}
       </h3>
 
       <p class="mt-0.5 text-xs leading-5 text-zinc-600 dark:text-zinc-300">
@@ -33,7 +34,7 @@ import {defineProps} from "vue";
 defineProps({
   image: String,
   author: String,
-  name: String,
+  title: String,
   description: String,
 });
 </script>
