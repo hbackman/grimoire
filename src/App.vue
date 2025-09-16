@@ -32,7 +32,10 @@
         class="mb-3"
       />
     </template>
+
   </main>
+
+  <ScrollToTopButton />
 </template>
 
 <script setup>
@@ -41,6 +44,7 @@ import {ref}              from "vue";
 import {browse}           from "@/lib/curseforge.js";
 import Addon              from "@/components/Addon.vue";
 import AddonSkeleton      from "@/components/AddonSkeleton.vue";
+import ScrollToTopButton  from "@/components/ScrollToTopButton.vue";
 import Search             from "@/components/Search.vue";
 
 const addons = ref([]);

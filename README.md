@@ -5,7 +5,7 @@ as an alternative to CurseForge. Easily browse, install, update, and manage your
 addons without ads, paywalls, or bloat.
 
 ## ✨ Features
-- [ ] Search and Browse
+- [x] Search and Browse
 - [ ] Install
 - [ ] Automatic Update
 - [ ] Multiple Installs
