@@ -18,7 +18,7 @@
       @keydown.enter="$event.target.blur()"
       @keydown.escape="$event.target.blur()"
       type="text"
-      placeholder="Search projects..."
+      placeholder="Search addons..."
       class="w-full bg-transparent text-sm text-zinc-900 placeholder-zinc-400
             focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
     />
