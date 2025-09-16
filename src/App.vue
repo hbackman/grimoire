@@ -1,18 +1,21 @@
 <template>
-  <main class="p-4" style="max-width: 500px; margin: 0 auto;">
-    <Search
-      v-model="search"
-      class="mb-3"
-    />
+  <!-- Main page -->
+  <div v-if="currentView === 'main'">
+    <main class="p-4" style="max-width: 500px; margin: 0 auto;">
+      <Search
+        v-model="search"
+        class="mb-3"
+      />
 
-    <VersionChips
-      :versions="availableVersions"
-      :selectedVersion="selectedVersion"
-      :showInstalled="showInstalled"
-      @update:selectedVersion="selectedVersion = $event"
-      @update:showInstalled="showInstalled = $event"
-      class="mb-4"
-    />
+      <VersionChips
+        :versions="availableVersions"
+        :selectedVersion="selectedVersion"
+        :showInstalled="showInstalled"
+        @update:selectedVersion="selectedVersion = $event"
+        @update:showInstalled="showInstalled = $event"
+        @open-settings="currentView = 'settings'"
+        class="mb-4"
+      />
 
     <!-- Loading skeletons -->
     <template v-if="loading">
@@ -42,9 +45,20 @@
       />
     </template>
 
-  </main>
+    </main>
 
-  <ScrollToTopButton />
+    <ScrollToTopButton />
+  </div>
+
+  <!-- Settings page -->
+  <Settings
+    v-else-if="currentView === 'settings'"
+    :addonPath="addonPath"
+    @back="currentView = 'main'"
+    @update:addonPath="addonPath = $event"
+    @browse-path="browseForAddonPath"
+    @save="saveSettings"
+  />
 </template>
 
 <script setup>
@@ -60,6 +74,7 @@ import Addon              from "@/components/Addon.vue";
 import AddonSkeleton      from "@/components/AddonSkeleton.vue";
 import ScrollToTopButton  from "@/components/ScrollToTopButton.vue";
 import Search             from "@/components/Search.vue";
+import Settings           from "@/components/Settings.vue";
 import VersionChips       from "@/components/VersionChips.vue";
 
 const addons = ref([]);
@@ -71,6 +86,8 @@ const hasMoreResults = ref(true);
 const availableVersions = ref(versions());
 const selectedVersion = ref(517); // Default to Retail
 const showInstalled = ref(false);
+const currentView = ref('main');
+const addonPath = ref('');
 
 let debounceTimer = null;
 
@@ -139,6 +156,22 @@ watch(selectedVersion, () => {
 watch(showInstalled, () => {
   performSearch(true);
 });
+
+const browseForAddonPath = async () => {
+  // This would use Tauri's file dialog API
+  try {
+    // For now, just a placeholder - would need to implement with Tauri
+    console.log('Browse for addon path...');
+  } catch (error) {
+    console.error('Failed to browse for path:', error);
+  }
+};
+
+const saveSettings = () => {
+  // This would save settings to local storage or Tauri store
+  console.log('Saving settings:', { addonPath: addonPath.value });
+  currentView.value = 'main';
+};
 
 onMounted(() => {
   performSearch(true);
