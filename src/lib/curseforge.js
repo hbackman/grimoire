@@ -2,7 +2,42 @@ import {invoke} from "@tauri-apps/api/core";
 import {listen} from "@tauri-apps/api/event";
 import {parse}  from "node-html-parser";
 
+// Request queue to handle concurrent requests
+let requestQueue = [];
+let isProcessing = false;
+
 export async function scrape(url) {
+  return new Promise((resolve, reject) => {
+    // Add request to queue
+    requestQueue.push({ url, resolve, reject });
+
+    // Process queue if not already processing
+    processQueue();
+  });
+}
+
+async function processQueue() {
+  if (isProcessing || requestQueue.length === 0) {
+    return;
+  }
+
+  isProcessing = true;
+
+  while (requestQueue.length > 0) {
+    const { url, resolve, reject } = requestQueue.shift();
+
+    try {
+      const data = await scrapeInternal(url);
+      resolve(data);
+    } catch (error) {
+      reject(error);
+    }
+  }
+
+  isProcessing = false;
+}
+
+async function scrapeInternal(url) {
   let unlistenOk;
   let unlistenErr;
 
@@ -26,7 +61,7 @@ export async function scrape(url) {
   if (unlistenErr) unlistenErr();
 
   return data;
-};
+}
 
 /**
  * Extract addons from a given HTML string. This does the heavy lefting
@@ -66,4 +101,17 @@ export async function browse(page = 1, size = 20, search) {
       : `https://www.curseforge.com/wow/search?page=${page}&pageSize=${size}&sortBy=relevancy&class=addons`
   );
   return extractAddonsFromHtml(data.html);
+};
+
+export function versions() {
+  return [{
+    label: "Retail",
+    value: 517,
+  }, {
+    label: "MoP Classic",
+    value: 79434,
+  }, {
+    label: "Classic",
+    value: 67408,
+  }];
 };

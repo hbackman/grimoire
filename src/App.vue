@@ -39,9 +39,14 @@
 </template>
 
 <script setup>
-import {onMounted, watch, onUnmounted} from "vue";
-import {ref}              from "vue";
-import {browse}           from "@/lib/curseforge.js";
+import {
+  onMounted,
+  onUnmounted,
+  watch,
+  ref,
+} from "vue";
+
+import {browse, versions} from "@/lib/curseforge.js";
 import Addon              from "@/components/Addon.vue";
 import AddonSkeleton      from "@/components/AddonSkeleton.vue";
 import ScrollToTopButton  from "@/components/ScrollToTopButton.vue";
