@@ -2,6 +2,15 @@
   <main class="p-4" style="max-width: 500px; margin: 0 auto;">
     <Search
       v-model="search"
+      class="mb-3"
+    />
+
+    <VersionChips
+      :versions="availableVersions"
+      :selectedVersion="selectedVersion"
+      :showInstalled="showInstalled"
+      @update:selectedVersion="selectedVersion = $event"
+      @update:showInstalled="showInstalled = $event"
       class="mb-4"
     />
 
@@ -51,6 +60,7 @@ import Addon              from "@/components/Addon.vue";
 import AddonSkeleton      from "@/components/AddonSkeleton.vue";
 import ScrollToTopButton  from "@/components/ScrollToTopButton.vue";
 import Search             from "@/components/Search.vue";
+import VersionChips       from "@/components/VersionChips.vue";
 
 const addons = ref([]);
 const search = ref("");
@@ -58,6 +68,9 @@ const loading = ref(false);
 const loadingMore = ref(false);
 const currentPage = ref(1);
 const hasMoreResults = ref(true);
+const availableVersions = ref(versions());
+const selectedVersion = ref(517); // Default to Retail
+const showInstalled = ref(false);
 
 let debounceTimer = null;
 
@@ -118,6 +131,14 @@ watch(search, () => {
 
   debounceTimer = setTimeout(() => performSearch(true), 300);
 }, { immediate: false });
+
+watch(selectedVersion, () => {
+  performSearch(true);
+});
+
+watch(showInstalled, () => {
+  performSearch(true);
+});
 
 onMounted(() => {
   performSearch(true);
