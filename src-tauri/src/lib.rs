@@ -4,6 +4,7 @@ use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 #[tauri::command]
 async fn scrape_in_webview(app: tauri::AppHandle, url: String) -> Result<(), String> {
     println!("scrape_in_webview called with URL: {}", url);
+
     let label = "scraper";
 
     // Create or reuse the hidden webview
@@ -21,8 +22,6 @@ async fn scrape_in_webview(app: tauri::AppHandle, url: String) -> Result<(), Str
     win.eval(&format!("window.location.replace({:?});", url))
         .map_err(|e| e.to_string())?;
 
-    println!("Navigation JavaScript injected successfully");
-
     // Wait for page to load and then poll for data
     let ah = app.clone();
     let win_label = win.label().to_string();
@@ -31,25 +30,12 @@ async fn scrape_in_webview(app: tauri::AppHandle, url: String) -> Result<(), Str
         // Wait a bit for navigation to start
         tokio::time::sleep(Duration::from_millis(2000)).await;
 
-        println!("Starting to poll for page content...");
-
-        // Poll for up to 30 seconds
         if let Some(w) = ah.get_webview_window(&win_label) {
-            // For now, let's just wait and try a direct extraction
-            let extract_js = r#"
+            let _ = w.eval(r#"
                 window.__TAURI__.core.invoke("handle_scrape_result", {
                     html: document.documentElement.outerHTML,
                 });
-            "#;
-
-            match w.eval(extract_js) {
-                Ok(_) => {
-                    println!("Extraction JavaScript executed");
-                }
-                Err(e) => {
-                    println!("Extraction JavaScript failed: {}", e);
-                }
-            }
+            "#);
         } else {
             println!("Webview window not found during polling");
         }
