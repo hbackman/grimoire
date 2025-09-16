@@ -44,7 +44,13 @@ export async function scrape(url) {
 async function extractAddonsFromHtml(html) {
   return parse(html).querySelectorAll(".project-card")
     .map(e => {
+      let name = e.querySelector(".name")
+        .getAttribute("href")
+        .split("/");
+      name = name[name.length - 1];
+
       return {
+        name,
         image:       e.querySelector(".art img").getAttribute("src"),
         title:       e.querySelector(".name").text.trim(),
         description: e.querySelector(".description").text.trim(),
