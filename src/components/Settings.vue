@@ -45,6 +45,39 @@
         </p>
       </div>
 
+      <!-- Game Version -->
+      <div class="bg-white rounded-xl p-4 shadow ring-1 ring-black/5 dark:bg-zinc-900 dark:ring-white/10">
+        <label class="block text-sm font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+          Game Version
+        </label>
+        <div class="relative">
+          <select
+            v-model="gameVersion"
+            class="w-full px-3 py-2 pr-10 text-sm bg-white border border-zinc-200 rounded-lg
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                   dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 dark:placeholder-zinc-400
+                   transition-all duration-200 appearance-none"
+          >
+            <option value="">Select a version</option>
+            <option
+              v-for="version in gameVersions"
+              :key="version.value"
+              :value="version.value"
+            >
+              {{ version.label }}
+            </option>
+          </select>
+          <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
+        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+          Select which World of Warcraft version to download addons for.
+        </p>
+      </div>
+
       <!-- Save button -->
       <button
         @click="saveSettings"
@@ -62,6 +95,7 @@ import {Store}     from "@tauri-apps/plugin-store";
 import {open}      from "@tauri-apps/plugin-dialog";
 import {ref}       from "vue";
 import {onMounted} from "vue";
+import {versions}  from "../lib/curseforge.js";
 
 const emit = defineEmits([
   "back",
@@ -71,6 +105,7 @@ let store = null;
 
 const gameAddonPath = ref("");
 const gameVersion = ref(null);
+const gameVersions = ref(versions());
 
 /**
  * Browse for the addon path.

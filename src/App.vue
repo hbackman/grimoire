@@ -7,11 +7,8 @@
         class="mb-3"
       />
 
-      <VersionChips
-        :versions="availableVersions"
-        :selectedVersion="selectedVersion"
+      <Chips
         :showInstalled="showInstalled"
-        @update:selectedVersion="selectedVersion = $event"
         @update:showInstalled="showInstalled = $event"
         @open-settings="currentView = 'settings'"
         class="mb-4"
@@ -36,7 +33,7 @@
         :title="addon.title"
         :description="addon.description"
         class="mb-3"
-        @click="download(addon.name, selectedVersion)"
+        @click="download(addon.name)"
       />
 
       <!-- Loading more indicator -->
@@ -72,12 +69,12 @@ import {
   versions,
 } from "@/lib/curseforge.js";
 
-import Addon              from "@/components/Addon.vue";
-import AddonSkeleton      from "@/components/AddonSkeleton.vue";
-import ScrollToTopButton  from "@/components/ScrollToTopButton.vue";
-import Search             from "@/components/Search.vue";
-import Settings           from "@/components/Settings.vue";
-import VersionChips       from "@/components/VersionChips.vue";
+import Addon             from "@/components/Addon.vue";
+import AddonSkeleton     from "@/components/AddonSkeleton.vue";
+import ScrollToTopButton from "@/components/ScrollToTopButton.vue";
+import Search            from "@/components/Search.vue";
+import Settings          from "@/components/Settings.vue";
+import Chips             from "@/components/Chips.vue";
 
 const addons = ref([]);
 const search = ref("");
@@ -85,8 +82,6 @@ const loading = ref(false);
 const loadingMore = ref(false);
 const currentPage = ref(1);
 const hasMoreResults = ref(true);
-const availableVersions = ref(versions());
-const selectedVersion = ref(517); // Default to Retail
 const showInstalled = ref(false);
 const currentView = ref('main');
 
@@ -153,10 +148,6 @@ watch(search, () => {
 
   debounceTimer = setTimeout(() => performSearch(true), 300);
 }, { immediate: false });
-
-watch(selectedVersion, () => {
-  performSearch(true);
-});
 
 watch(showInstalled, () => {
   performSearch(true);
