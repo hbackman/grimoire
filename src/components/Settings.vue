@@ -6,8 +6,7 @@
         @click="$emit('back')"
         class="flex items-center justify-center w-8 h-8 rounded-full bg-white ring-1 ring-zinc-200 hover:ring-zinc-300 hover:bg-zinc-50
                dark:bg-zinc-800 dark:ring-zinc-700 dark:hover:ring-zinc-600 dark:hover:bg-zinc-700
-               transition-all duration-200 ease-in-out"
-      >
+               transition-all duration-200 ease-in-out">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-zinc-700 dark:text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
         </svg>
@@ -24,8 +23,7 @@
         </label>
         <div class="flex gap-2">
           <input
-            :value="addonPath"
-            @input="$emit('update:addonPath', $event.target.value)"
+            v-model="gameAddonPath"
             type="text"
             placeholder="e.g., /Applications/World of Warcraft/Interface/AddOns"
             class="flex-1 px-3 py-2 text-sm bg-white border border-zinc-200 rounded-lg
@@ -34,12 +32,11 @@
                    transition-all duration-200"
           />
           <button
-            @click="browseForPath"
+            @click="browsePath"
             class="px-3 py-2 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 rounded-lg
                    hover:bg-zinc-50 hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500
                    dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-700 dark:hover:border-zinc-600
-                   transition-all duration-200"
-          >
+                   transition-all duration-200">
             Browse
           </button>
         </div>
@@ -53,8 +50,7 @@
         @click="saveSettings"
         class="w-full px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-lg
                hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-               dark:focus:ring-offset-zinc-900 transition-all duration-200"
-      >
+               dark:focus:ring-offset-zinc-900 transition-all duration-200">
         Save Settings
       </button>
     </div>
@@ -62,28 +58,49 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits } from 'vue'
+import {Store}     from "@tauri-apps/plugin-store";
+import {open}      from "@tauri-apps/plugin-dialog";
+import {ref}       from "vue";
+import {onMounted} from "vue";
 
-defineProps({
-  addonPath: {
-    type: String,
-    default: ''
-  }
-})
+const emit = defineEmits([
+  "back",
+]);
 
-const emit = defineEmits(['back', 'update:addonPath', 'save'])
+let store = null;
 
-const browseForPath = async () => {
-  // This would use Tauri's file dialog API
-  try {
-    // For now, just emit an event - the parent can handle the actual file dialog
-    emit('browse-path')
-  } catch (error) {
-    console.error('Failed to browse for path:', error)
-  }
-}
+const gameAddonPath = ref("");
+const gameVersion = ref(null);
 
-const saveSettings = () => {
-  emit('save')
-}
+/**
+ * Browse for the addon path.
+ */
+const browsePath = async () => {
+  // Browse path.
+  const selected = await open({
+    directory: true,
+    multiple: false,
+  });
+
+  gameAddonPath.value = selected;
+};
+
+/**
+ * Save the settings.
+ */
+const saveSettings = async () => {
+  await store.set("gameAddonPath", gameAddonPath.value ?? "");
+  await store.set("gameVersion",   gameVersion.value   ?? "");
+
+  await store.save();
+
+  emit("back");
+};
+
+onMounted(async () => {
+  store = await Store.load("settings.json");
+
+  gameAddonPath.value = await store.get("gameAddonPath");
+  gameVersion.value   = await store.get("gameVersion");
+});
 </script>

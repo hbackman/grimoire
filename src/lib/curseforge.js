@@ -94,13 +94,31 @@ async function extractAddonsFromHtml(html) {
     });
 };
 
-export async function browse(page = 1, size = 20, search) {
+export async function browse(options) {
+  const page   = options.page     ?? 1;
+  const size   = options.size     ?? 20;
+  const search = options.search   ?? null;
+
   const data = await scrape(
     search
       ? `https://www.curseforge.com/wow/search?page=${page}&pageSize=${size}&sortBy=relevancy&search=${search}`
       : `https://www.curseforge.com/wow/search?page=${page}&pageSize=${size}&sortBy=relevancy&class=addons`
   );
   return extractAddonsFromHtml(data.html);
+};
+
+export async function download(addon, version) {
+  version = 79434;
+  console.log(version);
+
+  const url = `https://www.curseforge.com/wow/addons/${addon}/files/all?page=1&pageSize=20&gameVersionTypeId=${version}`;
+  const data = await scrape(url);
+
+  const file = parse(data.html)
+    .querySelector(".file-card")
+    .getAttribute("href");
+
+  console.log(file);
 };
 
 export function versions() {

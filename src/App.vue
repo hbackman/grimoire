@@ -36,6 +36,7 @@
         :title="addon.title"
         :description="addon.description"
         class="mb-3"
+        @click="download(addon.name, selectedVersion)"
       />
 
       <!-- Loading more indicator -->
@@ -53,11 +54,7 @@
   <!-- Settings page -->
   <Settings
     v-else-if="currentView === 'settings'"
-    :addonPath="addonPath"
     @back="currentView = 'main'"
-    @update:addonPath="addonPath = $event"
-    @browse-path="browseForAddonPath"
-    @save="saveSettings"
   />
 </template>
 
@@ -69,7 +66,12 @@ import {
   ref,
 } from "vue";
 
-import {browse, versions} from "@/lib/curseforge.js";
+import {
+  browse,
+  download,
+  versions,
+} from "@/lib/curseforge.js";
+
 import Addon              from "@/components/Addon.vue";
 import AddonSkeleton      from "@/components/AddonSkeleton.vue";
 import ScrollToTopButton  from "@/components/ScrollToTopButton.vue";
@@ -87,7 +89,6 @@ const availableVersions = ref(versions());
 const selectedVersion = ref(517); // Default to Retail
 const showInstalled = ref(false);
 const currentView = ref('main');
-const addonPath = ref('');
 
 let debounceTimer = null;
 
@@ -101,7 +102,11 @@ const performSearch = async (resetResults = true) => {
   }
 
   try {
-    const results = await browse(currentPage.value, 20, search.value || undefined);
+    const results = await browse({
+      page: currentPage.value,
+      size: 20,
+      search: search.value || undefined,
+    });
 
     if (resetResults) {
       addons.value = results;
@@ -132,7 +137,7 @@ const loadMore = async () => {
 // Scroll detection for infinite scroll
 const handleScroll = () => {
   const scrollHeight = document.documentElement.scrollHeight;
-  const scrollTop = document.documentElement.scrollTop;
+  const scrollTop    = document.documentElement.scrollTop;
   const clientHeight = document.documentElement.clientHeight;
 
   // Trigger load more when user is 200px from bottom
@@ -156,22 +161,6 @@ watch(selectedVersion, () => {
 watch(showInstalled, () => {
   performSearch(true);
 });
-
-const browseForAddonPath = async () => {
-  // This would use Tauri's file dialog API
-  try {
-    // For now, just a placeholder - would need to implement with Tauri
-    console.log('Browse for addon path...');
-  } catch (error) {
-    console.error('Failed to browse for path:', error);
-  }
-};
-
-const saveSettings = () => {
-  // This would save settings to local storage or Tauri store
-  console.log('Saving settings:', { addonPath: addonPath.value });
-  currentView.value = 'main';
-};
 
 onMounted(() => {
   performSearch(true);

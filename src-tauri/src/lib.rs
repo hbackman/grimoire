@@ -65,6 +65,8 @@ async fn handle_scrape_error(app: tauri::AppHandle, error: String) -> Result<(),
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             scrape_in_webview,
             handle_scrape_result,
