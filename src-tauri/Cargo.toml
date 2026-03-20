@@ -29,3 +29,6 @@ tauri-plugin-store = "2.4.0"
 tauri-plugin-dialog = "2.4.0"
 zip = "2"
 
+# Unit tests live in the `addon-core` workspace crate (no system deps required).
+# Run them with: cargo test -p addon-core
+
