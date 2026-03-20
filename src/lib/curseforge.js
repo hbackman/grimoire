@@ -2,33 +2,26 @@ import {invoke} from "@tauri-apps/api/core";
 import {listen} from "@tauri-apps/api/event";
 import {parse}  from "node-html-parser";
 
-// Request queue to handle concurrent requests
+// ── Request queue (serialises scrape calls) ────────────────────────────────
+
 let requestQueue = [];
 let isProcessing = false;
 
 export async function scrape(url) {
   return new Promise((resolve, reject) => {
-    // Add request to queue
     requestQueue.push({ url, resolve, reject });
-
-    // Process queue if not already processing
     processQueue();
   });
 }
 
 async function processQueue() {
-  if (isProcessing || requestQueue.length === 0) {
-    return;
-  }
-
+  if (isProcessing || requestQueue.length === 0) return;
   isProcessing = true;
 
   while (requestQueue.length > 0) {
     const { url, resolve, reject } = requestQueue.shift();
-
     try {
-      const data = await scrapeInternal(url);
-      resolve(data);
+      resolve(await scrapeInternal(url));
     } catch (error) {
       reject(error);
     }
@@ -42,40 +35,22 @@ async function scrapeInternal(url) {
   let unlistenErr;
 
   const resultP = new Promise(async (resolve, reject) => {
-    unlistenOk = await listen("scraper:result", (evt) => {
-      resolve(evt.payload);
-    });
-
-    unlistenErr = await listen("scraper:error", (evt) => {
-      reject(new Error(evt.payload || "unknown error"));
-    });
+    unlistenOk  = await listen("scraper:result", (evt) => resolve(evt.payload));
+    unlistenErr = await listen("scraper:error",  (evt) => reject(new Error(evt.payload || "unknown error")));
   });
 
-  // Tell the backend to navigate the hidden window
   await invoke("scrape_in_webview", { url });
 
   const data = await resultP;
 
-  // Clean up listeners
-  if (unlistenOk) unlistenOk();
+  if (unlistenOk)  unlistenOk();
   if (unlistenErr) unlistenErr();
 
   return data;
 }
 
-/**
- * Extract addons from a given HTML string. This does the heavy lefting
- * of scraping the relevant information from the Curseforge response.
- *
- * @param {string} html
- *
- * @returns {{
- *  image: string,
- *  title: string,
- *  description: string,
- *  author: string,
- * }[]}
- */
+// ── HTML extraction helpers ────────────────────────────────────────────────
+
 async function extractAddonsFromHtml(html) {
   return parse(html).querySelectorAll(".project-card")
     .map(e => {
@@ -86,50 +61,165 @@ async function extractAddonsFromHtml(html) {
 
       return {
         name,
-        image:       e.querySelector(".art img").getAttribute("src"),
-        title:       e.querySelector(".name").text.trim(),
-        description: e.querySelector(".description").text.trim(),
-        author:      e.querySelector(".author").text.trim(),
+        image:       e.querySelector(".art img")?.getAttribute("src") ?? "",
+        title:       e.querySelector(".name")?.text.trim() ?? name,
+        description: e.querySelector(".description")?.text.trim() ?? "",
+        author:      e.querySelector(".author")?.text.trim() ?? "",
       };
     });
-};
+}
 
-export async function browse(options) {
-  const page   = options.page     ?? 1;
-  const size   = options.size     ?? 20;
-  const search = options.search   ?? null;
+/**
+ * Extract the most-recent file download link for a given gameVersionTypeId.
+ *
+ * @param {string} html
+ * @param {number} gameVersionTypeId  e.g. 517 (retail), 79434 (MoP), 67408 (classic era)
+ * @returns {string|null}  A CurseForge file page URL or null
+ */
+export function extractLatestFileUrl(html, gameVersionTypeId) {
+  const root = parse(html);
+
+  // .file-card links on the /files/all page
+  const cards = root.querySelectorAll(".file-card");
+  if (cards.length === 0) return null;
+
+  // Return href of the first match
+  const href = cards[0].getAttribute("href");
+  return href ? `https://www.curseforge.com${href}` : null;
+}
+
+/**
+ * From a /files/<id> detail page, extract the direct download URL.
+ * CurseForge renders it as a <a> with data-action="cf-download" or a
+ * Download button.
+ */
+export function extractDirectDownloadUrl(html) {
+  const root = parse(html);
+
+  // Try data-action download button
+  let el = root.querySelector('a[data-action="cf-download"]');
+  if (el) return el.getAttribute("href");
+
+  // Fallback: look for /download in links
+  const links = root.querySelectorAll("a");
+  for (const link of links) {
+    const href = link.getAttribute("href") || "";
+    if (href.includes("/download") && href.includes("curseforge.com")) {
+      return href;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extract version string from a file card page (from the file name or title).
+ */
+export function extractVersionFromFilesPage(html) {
+  const root = parse(html);
+
+  // File cards usually have a version in the file name displayed
+  const firstCard = root.querySelector(".file-card");
+  if (!firstCard) return null;
+
+  // Try the file display name
+  const nameEl = firstCard.querySelector(".name") || firstCard.querySelector(".file-name");
+  if (nameEl) {
+    const text = nameEl.text.trim();
+    // Extract semver-ish pattern
+    const match = text.match(/(\d+\.\d+[\.\d]*)/);
+    if (match) return match[1];
+  }
+
+  return null;
+}
+
+// ── Public API ─────────────────────────────────────────────────────────────
+
+/**
+ * Browse/search CurseForge addons.
+ */
+export async function browse(options = {}) {
+  const page   = options.page   ?? 1;
+  const size   = options.size   ?? 20;
+  const search = options.search ?? null;
 
   const data = await scrape(
     search
-      ? `https://www.curseforge.com/wow/search?page=${page}&pageSize=${size}&sortBy=relevancy&search=${search}`
+      ? `https://www.curseforge.com/wow/search?page=${page}&pageSize=${size}&sortBy=relevancy&search=${encodeURIComponent(search)}`
       : `https://www.curseforge.com/wow/search?page=${page}&pageSize=${size}&sortBy=relevancy&class=addons`
   );
   return extractAddonsFromHtml(data.html);
-};
+}
 
-export async function download(addon, version) {
-  version = 79434;
-  console.log(version);
+/**
+ * Get the download URL for a CurseForge addon slug + game version type ID.
+ * Returns { downloadUrl, version } or throws.
+ */
+export async function getAddonDownloadUrl(addonSlug, gameVersionTypeId) {
+  const filesUrl = `https://www.curseforge.com/wow/addons/${addonSlug}/files/all?page=1&pageSize=20&gameVersionTypeId=${gameVersionTypeId}`;
+  const data     = await scrape(filesUrl);
 
-  const url = `https://www.curseforge.com/wow/addons/${addon}/files/all?page=1&pageSize=20&gameVersionTypeId=${version}`;
-  const data = await scrape(url);
+  const fileUrl  = extractLatestFileUrl(data.html, gameVersionTypeId);
+  if (!fileUrl) throw new Error(`No files found for ${addonSlug}`);
 
-  const file = parse(data.html)
-    .querySelector(".file-card")
-    .getAttribute("href");
+  const version  = extractVersionFromFilesPage(data.html);
 
-  console.log(file);
-};
+  // Navigate to the file detail page to get the real download link
+  const fileData = await scrape(fileUrl);
+  let downloadUrl = extractDirectDownloadUrl(fileData.html);
+
+  // CurseForge direct download link pattern: /api/v1/mods/{modId}/files/{fileId}/download
+  // If still not found, try to construct from the file page URL
+  if (!downloadUrl) {
+    // fileUrl looks like /wow/addons/<slug>/files/<fileId>
+    const m = fileUrl.match(/\/files\/(\d+)$/);
+    if (m) {
+      // Try the standard download endpoint
+      downloadUrl = `https://www.curseforge.com/wow/addons/${addonSlug}/download/${m[1]}`;
+    }
+  }
+
+  if (!downloadUrl) throw new Error("Could not find download URL");
+
+  return { downloadUrl, version };
+}
+
+/**
+ * Install an addon by slug into the given AddOns directory.
+ * Returns the list of folders extracted.
+ */
+export async function installAddon(addonSlug, gameVersionTypeId, addonsPath) {
+  const { downloadUrl } = await getAddonDownloadUrl(addonSlug, gameVersionTypeId);
+  return await invoke("install_addon_zip", { url: downloadUrl, addonsPath });
+}
+
+/**
+ * Check the latest version of an addon on CurseForge.
+ * Returns a version string or null.
+ */
+export async function getLatestVersion(addonSlug, gameVersionTypeId) {
+  try {
+    const filesUrl = `https://www.curseforge.com/wow/addons/${addonSlug}/files/all?page=1&pageSize=5&gameVersionTypeId=${gameVersionTypeId}`;
+    const data     = await scrape(filesUrl);
+    return extractVersionFromFilesPage(data.html);
+  } catch {
+    return null;
+  }
+}
 
 export function versions() {
-  return [{
-    label: "Retail",
-    value: 517,
-  }, {
-    label: "MoP Classic",
-    value: 79434,
-  }, {
-    label: "Classic",
-    value: 67408,
-  }];
-};
+  return [
+    // Classic variants listed first — this is a Classic addon manager
+    { label: "Classic Era (1.x)",     value: 67408 },
+    { label: "Cataclysm Classic",     value: 73246 },
+    { label: "MoP Classic",           value: 79434 },
+    { label: "Retail",                value: 517   },
+  ];
+}
+
+/**
+ * The default/fallback game version type ID to use when none is stored.
+ * Classic Era is our primary target.
+ */
+export const DEFAULT_GAME_VERSION = 67408;

@@ -1,12 +1,26 @@
 <template>
   <div class="flex gap-2 flex-wrap items-center justify-between">
-    <!-- Installed Toggle -->
+    <!-- Tab chips -->
     <div class="flex gap-2 flex-wrap">
       <button
-        @click="toggleInstalled"
+        @click="setView('browse')"
         :class="[
           'px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ease-in-out flex items-center gap-1.5',
-          showInstalled
+          currentView === 'browse'
+            ? 'bg-blue-500 text-white shadow-sm'
+            : 'bg-white text-zinc-700 ring-1 ring-zinc-200 hover:ring-zinc-300 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-700 dark:hover:ring-zinc-600 dark:hover:bg-zinc-700'
+        ]">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        </svg>
+        Browse
+      </button>
+
+      <button
+        @click="setView('installed')"
+        :class="[
+          'px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ease-in-out flex items-center gap-1.5',
+          currentView === 'installed'
             ? 'bg-green-500 text-white shadow-sm'
             : 'bg-white text-zinc-700 ring-1 ring-zinc-200 hover:ring-zinc-300 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-700 dark:hover:ring-zinc-600 dark:hover:bg-zinc-700'
         ]">
@@ -17,9 +31,8 @@
       </button>
     </div>
 
-    <!-- Settings -->
+    <!-- Settings gear -->
     <div class="flex gap-2 items-center">
-      <!-- Settings gear icon -->
       <button
         @click="openSettings"
         class="w-7 h-7 flex items-center justify-center rounded-full bg-white text-zinc-600 ring-1 ring-zinc-200
@@ -37,33 +50,25 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits } from 'vue'
+import { defineProps, defineEmits } from 'vue';
 
 const props = defineProps({
-  versions: {
-    type: Array,
-    required: true
+  currentView: {
+    type: String,
+    default: 'browse',
   },
-  selectedVersion: {
-    type: Number,
-    default: null
-  },
-  showInstalled: {
-    type: Boolean,
-    default: false
-  }
-})
+});
 
 const emit = defineEmits([
-  'update:showInstalled',
+  'update:currentView',
   'open-settings',
-])
+]);
 
-const toggleInstalled = () => {
-  emit('update:showInstalled', !props.showInstalled)
-}
+const setView = (view) => {
+  emit('update:currentView', view);
+};
 
 const openSettings = () => {
-  emit('open-settings')
-}
+  emit('open-settings');
+};
 </script>
