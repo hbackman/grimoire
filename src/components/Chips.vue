@@ -29,6 +29,20 @@
         </svg>
         Installed
       </button>
+
+      <button
+        @click="setView('profiles')"
+        :class="[
+          'px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ease-in-out flex items-center gap-1.5',
+          currentView === 'profiles'
+            ? 'bg-purple-500 text-white shadow-sm'
+            : 'bg-white text-zinc-700 ring-1 ring-zinc-200 hover:ring-zinc-300 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-700 dark:hover:ring-zinc-600 dark:hover:bg-zinc-700'
+        ]">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+        </svg>
+        Profiles
+      </button>
     </div>
 
     <!-- Settings gear -->

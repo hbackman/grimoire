@@ -85,6 +85,11 @@
         ref="installedView"
       />
 
+      <!-- ── Profiles tab ── -->
+      <ProfilesView
+        v-else-if="mainView === 'profiles'"
+      />
+
     </main>
 
     <ScrollToTopButton />
@@ -115,6 +120,7 @@ import Search         from "@/components/Search.vue";
 import Settings       from "@/components/Settings.vue";
 import Chips          from "@/components/Chips.vue";
 import InstalledView  from "@/components/InstalledView.vue";
+import ProfilesView   from "@/components/ProfilesView.vue";
 
 // ── State ──────────────────────────────────────────────────────────────────
 

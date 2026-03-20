@@ -1,100 +1,111 @@
-# Grimoire MVP – Work Log
+# Grimoire — Work Log
 
-Branch: `feature/mvp-addon-manager`  
-Target: WoW **Classic** addon manager built on Tauri + Vue 3
+## Session 1 (MVP — branch: `feature/mvp-addon-manager`)
+
+### Goals
+Build a functional WoW Classic addon manager desktop app from scratch using Tauri v2 + Vue 3.
+
+### Completed
+
+#### Backend (Rust — `src-tauri/src/lib.rs`)
+- **`.toc` file parsing** (`parse_toc`) — reads `## Key: Value` metadata lines, normalises keys to lowercase, handles the `Interface-Classic` / `Interface-Classic-Era` precedence logic so Classic-specific interface versions win over the generic `Interface:` key.
+- **`validate_wow_path`** — accepts a WoW installation root, `Interface/` subdirectory, or direct `AddOns/` directory. Detects `_classic_`, `_classic_era_`, `_classic_ptr_`, `_retail_`, `_ptr_` variants.
+- **`scan_addons`** — walks a directory, parses each addon's `.toc`, returns sorted `InstalledAddon` structs.
+- **`install_addon_zip`** — downloads a zip from a URL (async, reqwest) and extracts it into the AddOns directory, skipping `__MACOSX` junk.
+- **`remove_addon`** — removes a folder with path traversal sanitization.
+- **`create_test_addon_dir`** — creates a fake WoW Classic AddOns directory with 3 sample addons for development.
+- **Scraper commands** — `scrape_in_webview`, `handle_scrape_result`, `handle_scrape_error` — route CurseForge page scraping through a hidden Tauri webview.
+
+#### Frontend (Vue 3 + Tailwind)
+- **`App.vue`** — tab routing (Browse / Installed), WoW path check banner, infinite scroll on search.
+- **`InstalledView.vue`** — lists installed addons with check-updates, update-all, remove per addon.
+- **`Addon.vue`** — card component for both search results and installed addons.
+- **`AddonSkeleton.vue`** — loading skeleton.
+- **`Search.vue`** — debounced search input.
+- **`Settings.vue`** — WoW path picker and game version selector.
+- **`Chips.vue`** — tab navigation chips.
+- **`ScrollToTopButton.vue`** — scroll utility.
+- **`lib/curseforge.js`** — CurseForge API integration: browse, search, version check, download URL resolution. Uses a scraper-based fallback for download links not exposed in the public API.
+
+#### Configuration
+- Tauri plugins: `tauri-plugin-store` (settings persistence), `tauri-plugin-dialog` (file pickers), `tauri-plugin-opener`.
+- Dark mode via Tailwind's `dark:` classes.
+- Vite config with `@/` path alias.
 
 ---
 
-## What Was Built
+## Session 2 (Tests + Post-MVP — branches: `feature/mvp-addon-manager`, `feature/post-mvp`)
 
-### Rust backend (`src-tauri/src/lib.rs`)
+### Task 1: Unit Tests (`feature/mvp-addon-manager`)
+
+Created `src-tauri/addon-core/` — a standalone Rust workspace crate with **no system library dependencies** (no GTK, no WebKit). This allows `cargo test -p addon-core` to run in any environment, including CI sandboxes without a GUI stack.
+
+The crate contains the pure business logic extracted from `lib.rs` plus:
+
+#### Test coverage (48 tests, all passing)
+
+| Module | Tests |
+|--------|-------|
+| `parse_toc` | Basic fields (Title, Version, Interface, Notes, Author), Interface-Classic priority, Interface-Classic-Era priority, Classic wins over generic, generic sets canonical if no Classic, missing fields, empty input, extra whitespace, non-metadata lines ignored, keys lowercased, Dependencies field |
+| `validate_wow_path` | Direct AddOns dir, case-insensitive AddOns, Interface/ subdir, `_classic_` root, `_classic_era_` root, `_retail_` root, nonexistent path, wrong dir |
+| `scan_addons` | Basic (2 addons, sorted), all metadata fields, skips no-toc folders, empty dir, nonexistent path, folder-name fallback title |
+| `create_test_addon_dir` | Creates TestAddOns folder, all 3 addon dirs present, .toc parseable, scannable by scan_addons |
+| `remove_addon` | Rejects `../../../etc`, rejects forward slash, rejects backslash, rejects `..`, removes real folder, ok when already gone |
+| `disable_addon` | Renames to `-disabled`, rejects traversal |
+| `enable_addon` | Renames back from `-disabled` |
+| `scan_addons_with_disabled` | Marks `disabled: true` for `-disabled` folders, `disabled: false` for normal |
+| `AddonProfiles` | Create/save/load, delete, snapshot from addons |
+| `AddonNotes` | set/get/save/load, remove |
+| `export_addon_list` | Manifest v1, correct fields |
+| `backup_addon` | Creates zip file, rejects traversal |
+
+Also added a `Cargo.toml` workspace root at the repo root so `cargo test -p addon-core` works from anywhere in the project.
+
+---
+
+### Task 2: Post-MVP Features (`feature/post-mvp`)
+
+#### Backend new commands (`src-tauri/src/lib.rs`)
 
 | Command | Description |
-|---|---|
-| `scan_addons(path)` | Reads every subfolder under the AddOns dir, parses its `.toc` file, returns a list of `InstalledAddon` structs |
-| `validate_wow_path(path)` | Accepts a WoW install root _or_ a direct AddOns dir; returns a label (`"classic"`, `"classic_era"`, `"addons_dir"`, etc.) or an error. Classic variants are checked first. |
-| `install_addon_zip(url, addons_path)` | Downloads a zip from the given URL, extracts it into the AddOns directory, returns the list of top-level folders created |
-| `remove_addon(addons_path, folder)` | Deletes an addon folder; includes path-traversal guard |
-| `create_test_addon_dir(base_path)` | Creates a fake AddOns directory with 3 sample Classic addons (WeakAuras, Details, Questie) for dev/testing purposes |
+|---------|-------------|
+| `scan_addons_with_disabled` | Scans addons including `-disabled` folders; returns `disabled: true` flag |
+| `disable_addon` | Renames `AddonFolder` → `AddonFolder-disabled` (reversible, WoW ignores it) |
+| `enable_addon` | Renames back from `-disabled` |
+| `load_profiles` | Loads named addon profiles from `Interface/grimoire-profiles.json` |
+| `save_profile` | Saves a named profile (list of folder names) |
+| `delete_profile` | Deletes a profile |
+| `load_notes` | Loads user notes from `Interface/grimoire-notes.json` |
+| `save_note` | Saves/clears a note for a specific addon |
+| `export_addon_list` | Returns installed addons as a JSON manifest (v1 format) |
+| `backup_addon` | Zips an addon folder to a backup directory before updating |
 
-#### TOC parsing
-- Handles both `## Interface: 11502` (old style) and `## Interface-Classic: 11502` (Classic-specific key, takes priority)
-- Also handles `## Interface-Classic-Era:` and `## Interface-Classic-Progression:`
-- Normalises all metadata keys to lowercase
-- `.toc` filename must match the folder name (standard WoW convention)
+#### Frontend new features
 
-### Frontend
+- **Disable/Enable toggle** (`InstalledView.vue`) — each addon card gets a disable/enable button. Disabled addons are shown at reduced opacity.
+- **Dependency info** (`InstalledView.vue`) — if a `.toc` file has `## Dependencies:`, the required addons are shown below the card.
+- **Inline user notes** (`InstalledView.vue`) — click `+ add note` to type a personal note for any addon; saved per-addon in `grimoire-notes.json`.
+- **Export addon list** (`InstalledView.vue`) — "Export List" button opens a modal with the JSON manifest; includes a "Copy to Clipboard" button.
+- **Profiles tab** (`ProfilesView.vue` + `Chips.vue`) — new purple "Profiles" chip; create profiles by snapshotting current addons, list/delete saved profiles.
+- **`App.vue`** — wired up the new `ProfilesView` component.
 
-#### `src/lib/curseforge.js`
-- Kept the existing scrape-via-hidden-webview approach
-- Added `getAddonDownloadUrl(slug, gameVersionTypeId)` — scrapes the `/files/all` page, then the file detail page, to find the direct download URL
-- Added `getLatestVersion(slug, gameVersionTypeId)` — used for update checks
-- Added `DEFAULT_GAME_VERSION = 67408` (Classic Era)
-- Updated `versions()` to list Classic variants first (Classic Era, Cataclysm Classic, MoP Classic, then Retail)
-
-#### `src/components/Addon.vue`
-- Unified component used for both search results and installed addons
-- Shows: image/initial letter, title, version badge, description/notes, author
-- Action buttons: **Install** (search results), **Update** (installed with update available), **Remove** (installed)
-- `updateAvailable` prop shows an amber badge with the newer version
-
-#### `src/components/InstalledView.vue`
-- New component for the Installed tab
-- Loads settings from Tauri store on mount, then calls `scan_addons`
-- **Check for Updates**: iterates installed addons, guesses CurseForge slug from folder name (lowercase, underscore→hyphen), calls `getLatestVersion`, shows badges
-- **Update All**: updates all addons with available updates sequentially
-- **Remove**: calls `remove_addon` then rescans
-- Progress messages during update operations
-
-#### `src/components/Chips.vue`
-- Replaced installed toggle with Browse / Installed tab chips
-
-#### `src/components/Settings.vue`
-- Default game version is now Classic Era (67408)
-- Path placeholder shows `_classic_/Interface/AddOns`
-- Path description updated to mention Classic
-- Real-time path validation with `validate_wow_path` — shows human-readable labels per variant
-- Developer section: creates a test AddOns directory pre-populated with Classic addons (WeakAuras, Details, Questie with `## Interface-Classic: 11502` TOC entries)
-
-#### `src/App.vue`
-- Added `InstalledView` component
-- Browse / Installed view switching
-- First-run banner when no AddOns path is configured
-- Install button on search results calls `getAddonDownloadUrl` + `install_addon_zip`
-- Default game version uses `DEFAULT_GAME_VERSION` constant
+#### Distribution plan
+`DISTRIBUTION.md` added to repo root covering:
+- `tauri build` and what it produces per platform
+- GitHub Releases as primary distribution channel
+- macOS notarization walkthrough
+- Windows code signing walkthrough
+- Auto-update via `tauri-plugin-updater` with manifest format
+- Full GitHub Actions CI/CD pipeline (matrix: macOS universal, Windows x64, Linux x64) triggered on version tags
+- Release checklist
 
 ---
 
-## What Works
+## Known limitations / future work
 
-- TOC parsing (Classic `## Interface-Classic:` key handled correctly)
-- `scan_addons` / `validate_wow_path` / `remove_addon` / `create_test_addon_dir` — all pure Rust, no GUI deps, ready to use
-- `install_addon_zip` — download + extract logic is solid
-- Full Vue frontend: Browse tab (search + install), Installed tab (scan + update check + update + remove), Settings with Classic defaults
-- `cargo check` passes cleanly (zero errors, zero warnings from our code)
-
-## What's Not Done / Known Issues
-
-### Update checking — slug guessing
-The update-check in `InstalledView.vue` guesses the CurseForge slug by lowercasing the folder name and replacing underscores with hyphens. This works for well-known addons (WeakAuras → `weakauras`, Details → `details`) but will miss addons whose folder name differs from their CurseForge slug. A proper solution would be storing the slug at install time.
-
-### CurseForge download flow
-The full install flow (search → install) depends on the CurseForge scraper correctly extracting a direct download URL from their file detail pages. CurseForge's HTML structure changes occasionally, so this may need updating. The scraper infrastructure is in place; `extractDirectDownloadUrl` and `extractLatestFileUrl` may need tweaking once tested against live pages.
-
-### `cargo build` (linking) blocked by environment
-`cargo check` passes — all Rust code is type-correct. However, `cargo build` (full compile + link) requires the webkit2gtk-4.1 and libsoup-3.0 **runtime** shared libraries (`libwebkit2gtk-4.1.so.0`, `libsoup-3.0.so.0`) to be installed on the build host. These are not present in the CI/sandbox environment (the dev packages were manually extracted to work around the missing `apt` access, but the runtime `.so` files themselves were never installed). On a proper Linux dev machine with `libwebkit2gtk-4.1-dev` and `libsoup-3.0-dev` installed via apt, `cargo build` will succeed.
-
-### Multi-folder addons
-Some CurseForge addons extract multiple folders (e.g. ElvUI + ElvUI_Options). `install_addon_zip` handles this correctly at the extraction level, but the UI doesn't group them or track the relationship.
-
----
-
-## How to Test
-
-1. Build requires Linux with Tauri deps: `sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev`
-2. Run `cargo build` in `src-tauri/`
-3. `bun install && bun run tauri dev` from the root
-4. In Settings → use "Create" under dev section to generate test addons at e.g. `/tmp`
-5. Set the path to the generated `TestAddOns` folder
-6. Switch to Installed tab — should show WeakAuras, Details, Questie
-7. Browse tab → search for an addon → Install (requires CurseForge to be reachable)
+- **CurseForge slug mapping** — update checks rely on guessing the CurseForge slug from the folder name. A proper `## X-Curse-Project-ID:` → slug mapping would make this reliable.
+- **Bulk disable/enable** — UI doesn't yet support selecting multiple addons for batch operations. The backend supports it with multiple individual calls.
+- **Changelog display** — `DISTRIBUTION.md` mentions this as a future feature. The CurseForge API can return changelog HTML; it would need a webview to display richly.
+- **Dark/light theme toggle** — Tailwind dark mode is wired to the OS preference (`prefers-color-scheme`). A manual toggle button in Settings would be a small addition.
+- **Import addon list** — `export_addon_list` is implemented but `import` (re-install all addons from a manifest) is not yet implemented.
+- **Last updated date** — `InstalledAddon.last_updated` is populated from the `.toc` file's mtime in `addon-core`, but not yet surfaced in the UI.

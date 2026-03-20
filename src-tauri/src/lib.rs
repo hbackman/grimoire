@@ -339,6 +339,310 @@ fn create_test_addon_dir(base_path: String) -> Result<String, String> {
     Ok(addons_dir.to_string_lossy().to_string())
 }
 
+// ── Post-MVP: scan with disabled addons ───────────────────────────────────────
+
+/// Scan addons including those disabled via the `-disabled` folder-suffix convention.
+/// Returns addons with `disabled: true` for ones whose folder ends with `-disabled`.
+#[tauri::command]
+fn scan_addons_with_disabled(path: String) -> Result<Vec<serde_json::Value>, String> {
+    let dir = Path::new(&path);
+    if !dir.exists() {
+        return Err(format!("Directory does not exist: {}", path));
+    }
+
+    let mut addons: Vec<serde_json::Value> = Vec::new();
+    let entries = fs::read_dir(dir).map_err(|e| e.to_string())?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let entry_path = entry.path();
+        if !entry_path.is_dir() { continue; }
+
+        let raw_name = entry_path.file_name().unwrap().to_string_lossy().to_string();
+        let (canonical_name, is_disabled) = if let Some(base) = raw_name.strip_suffix("-disabled") {
+            (base.to_string(), true)
+        } else {
+            (raw_name.clone(), false)
+        };
+
+        let toc_path = entry_path.join(format!("{}.toc", canonical_name));
+        if let Ok(toc_content) = fs::read_to_string(&toc_path) {
+            let meta = parse_toc(&toc_content);
+            let interface_str = meta.get("interface_canonical").cloned().unwrap_or_default();
+            let deps: Vec<String> = meta.get("dependencies")
+                .map(|s| s.split(',').map(|d| d.trim().to_string()).filter(|d| !d.is_empty()).collect())
+                .unwrap_or_default();
+
+            addons.push(serde_json::json!({
+                "folder": canonical_name,
+                "title": meta.get("title").cloned().unwrap_or_else(|| canonical_name.clone()),
+                "version": meta.get("version").cloned().unwrap_or_default(),
+                "notes": meta.get("notes").cloned().unwrap_or_default(),
+                "author": meta.get("author").cloned().unwrap_or_default(),
+                "interface": interface_str,
+                "updateAvailable": null,
+                "dependencies": deps,
+                "lastUpdated": null,
+                "disabled": is_disabled,
+                "userNotes": null,
+            }));
+        }
+    }
+
+    addons.sort_by(|a, b| {
+        let ta = a["title"].as_str().unwrap_or("").to_lowercase();
+        let tb = b["title"].as_str().unwrap_or("").to_lowercase();
+        ta.cmp(&tb)
+    });
+
+    Ok(addons)
+}
+
+/// Disable an addon by renaming its folder to `<name>-disabled`.
+#[tauri::command]
+fn disable_addon(addons_path: String, folder: String) -> Result<(), String> {
+    if folder.contains('/') || folder.contains('\\') || folder.contains("..") {
+        return Err("Invalid folder name".to_string());
+    }
+    let src = Path::new(&addons_path).join(&folder);
+    if !src.exists() {
+        return Err(format!("Addon folder not found: {}", folder));
+    }
+    let dst = Path::new(&addons_path).join(format!("{}-disabled", folder));
+    fs::rename(&src, &dst).map_err(|e| e.to_string())
+}
+
+/// Re-enable an addon by renaming `<name>-disabled` back to `<name>`.
+#[tauri::command]
+fn enable_addon(addons_path: String, folder: String) -> Result<(), String> {
+    if folder.contains('/') || folder.contains('\\') || folder.contains("..") {
+        return Err("Invalid folder name".to_string());
+    }
+    let src = Path::new(&addons_path).join(format!("{}-disabled", folder));
+    if !src.exists() {
+        return Err(format!("Disabled addon folder not found: {}-disabled", folder));
+    }
+    let dst = Path::new(&addons_path).join(&folder);
+    fs::rename(&src, &dst).map_err(|e| e.to_string())
+}
+
+// ── Post-MVP: profiles ────────────────────────────────────────────────────────
+
+fn profiles_path(addons_path: &str) -> PathBuf {
+    Path::new(addons_path)
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("grimoire-profiles.json")
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+struct AddonProfiles {
+    profiles: HashMap<String, Vec<String>>,
+}
+
+/// Load saved addon profiles from disk.
+#[tauri::command]
+fn load_profiles(addons_path: String) -> Result<HashMap<String, Vec<String>>, String> {
+    let path = profiles_path(&addons_path);
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+    let json = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let p: AddonProfiles = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+    Ok(p.profiles)
+}
+
+/// Save a named profile (list of addon folder names).
+#[tauri::command]
+fn save_profile(addons_path: String, name: String, folders: Vec<String>) -> Result<(), String> {
+    let path = profiles_path(&addons_path);
+    let mut p: AddonProfiles = if path.exists() {
+        let json = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&json).unwrap_or_default()
+    } else {
+        AddonProfiles::default()
+    };
+    p.profiles.insert(name, folders);
+    let json = serde_json::to_string_pretty(&p).map_err(|e| e.to_string())?;
+    fs::write(&path, json).map_err(|e| e.to_string())
+}
+
+/// Delete a named profile.
+#[tauri::command]
+fn delete_profile(addons_path: String, name: String) -> Result<bool, String> {
+    let path = profiles_path(&addons_path);
+    if !path.exists() {
+        return Ok(false);
+    }
+    let mut p: AddonProfiles = {
+        let json = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&json).unwrap_or_default()
+    };
+    let removed = p.profiles.remove(&name).is_some();
+    let json = serde_json::to_string_pretty(&p).map_err(|e| e.to_string())?;
+    fs::write(&path, json).map_err(|e| e.to_string())?;
+    Ok(removed)
+}
+
+// ── Post-MVP: user notes ──────────────────────────────────────────────────────
+
+fn notes_path(addons_path: &str) -> PathBuf {
+    Path::new(addons_path)
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("grimoire-notes.json")
+}
+
+/// Load user notes for all addons.
+#[tauri::command]
+fn load_notes(addons_path: String) -> Result<HashMap<String, String>, String> {
+    let path = notes_path(&addons_path);
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+    let json = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let map: HashMap<String, String> = serde_json::from_str(&json).unwrap_or_default();
+    Ok(map)
+}
+
+/// Save a user note for a specific addon.
+#[tauri::command]
+fn save_note(addons_path: String, folder: String, note: String) -> Result<(), String> {
+    let path = notes_path(&addons_path);
+    let mut map: HashMap<String, String> = if path.exists() {
+        let json = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&json).unwrap_or_default()
+    } else {
+        HashMap::new()
+    };
+    if note.is_empty() {
+        map.remove(&folder);
+    } else {
+        map.insert(folder, note);
+    }
+    let json = serde_json::to_string_pretty(&map).map_err(|e| e.to_string())?;
+    fs::write(&path, json).map_err(|e| e.to_string())
+}
+
+// ── Post-MVP: export addon list ───────────────────────────────────────────────
+
+/// Export the installed addon list as a JSON manifest string.
+/// The frontend can offer this as a file download or display it for copy-paste.
+#[tauri::command]
+fn export_addon_list(addons_path: String) -> Result<String, String> {
+    let dir = Path::new(&addons_path);
+    if !dir.exists() {
+        return Err(format!("Directory does not exist: {}", addons_path));
+    }
+
+    let entries = fs::read_dir(dir).map_err(|e| e.to_string())?;
+    let mut addons = Vec::new();
+
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if !path.is_dir() { continue; }
+
+        let folder_name = path.file_name().unwrap().to_string_lossy().to_string();
+        // Skip disabled folders
+        if folder_name.ends_with("-disabled") { continue; }
+
+        let toc_path = path.join(format!("{}.toc", folder_name));
+        if let Ok(toc_content) = fs::read_to_string(&toc_path) {
+            let meta = parse_toc(&toc_content);
+            addons.push(serde_json::json!({
+                "folder": folder_name,
+                "title": meta.get("title").cloned().unwrap_or_else(|| folder_name.clone()),
+                "version": meta.get("version").cloned().unwrap_or_default(),
+                "curseforgeid": null,
+            }));
+        }
+    }
+
+    addons.sort_by(|a, b| {
+        let ta = a["title"].as_str().unwrap_or("").to_lowercase();
+        let tb = b["title"].as_str().unwrap_or("").to_lowercase();
+        ta.cmp(&tb)
+    });
+
+    let manifest = serde_json::json!({
+        "version": 1,
+        "exported_at": chrono_now_iso(),
+        "addons": addons,
+    });
+
+    serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())
+}
+
+fn chrono_now_iso() -> String {
+    // Use std::time rather than pulling in chrono
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("{}", secs)
+}
+
+// ── Post-MVP: auto-backup ─────────────────────────────────────────────────────
+
+/// Zip an addon folder into a backup directory before updating.
+/// Returns the path to the created zip file.
+#[tauri::command]
+fn backup_addon(addons_path: String, folder: String, backup_dir: String) -> Result<String, String> {
+    if folder.contains('/') || folder.contains('\\') || folder.contains("..") {
+        return Err("Invalid folder name".to_string());
+    }
+
+    let src_dir = Path::new(&addons_path).join(&folder);
+    if !src_dir.exists() {
+        return Err(format!("Addon folder not found: {}", folder));
+    }
+
+    fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
+
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let zip_name = format!("{}-{}.zip", folder, ts);
+    let zip_path = Path::new(&backup_dir).join(&zip_name);
+    let zip_file = fs::File::create(&zip_path).map_err(|e| e.to_string())?;
+
+    let mut writer = zip::ZipWriter::new(zip_file);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    add_dir_to_zip(&mut writer, &src_dir, &src_dir, options)?;
+    writer.finish().map_err(|e| e.to_string())?;
+
+    Ok(zip_path.to_string_lossy().to_string())
+}
+
+fn add_dir_to_zip(
+    writer: &mut zip::ZipWriter<fs::File>,
+    base: &Path,
+    current: &Path,
+    options: zip::write::SimpleFileOptions,
+) -> Result<(), String> {
+    for entry in fs::read_dir(current).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let entry_path = entry.path();
+        let relative = entry_path.strip_prefix(base).map_err(|e| e.to_string())?;
+        let zip_name = relative.to_string_lossy().replace('\\', "/");
+
+        if entry_path.is_dir() {
+            writer.add_directory(&zip_name, options).map_err(|e| e.to_string())?;
+            add_dir_to_zip(writer, base, &entry_path, options)?;
+        } else {
+            writer.start_file(&zip_name, options).map_err(|e| e.to_string())?;
+            let mut f = fs::File::open(&entry_path).map_err(|e| e.to_string())?;
+            io::copy(&mut f, writer).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 // ── App entry ─────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -352,12 +656,26 @@ pub fn run() {
             scrape_in_webview,
             handle_scrape_result,
             handle_scrape_error,
-            // Addon management
+            // Addon management (MVP)
             scan_addons,
             validate_wow_path,
             install_addon_zip,
             remove_addon,
             create_test_addon_dir,
+            // Post-MVP: disable/enable
+            scan_addons_with_disabled,
+            disable_addon,
+            enable_addon,
+            // Post-MVP: profiles
+            load_profiles,
+            save_profile,
+            delete_profile,
+            // Post-MVP: user notes
+            load_notes,
+            save_note,
+            // Post-MVP: export & backup
+            export_addon_list,
+            backup_addon,
         ])
         .setup(|_app| {
             Ok(())
