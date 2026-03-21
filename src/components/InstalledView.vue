@@ -65,6 +65,7 @@
         v-for="addon in addons"
         :key="addon.folder"
         :installed="true"
+        :image="addonImages[addon.folder]"
         :title="addon.title"
         :folder="addon.folder"
         :version="addon.version"
@@ -91,6 +92,7 @@ import Addon from "@/components/Addon.vue";
 const emit = defineEmits(["refresh"]);
 
 const addons          = ref([]);
+const addonImages     = ref({});
 const checkingUpdates = ref(false);
 const updatingAll     = ref(false);
 const updateProgress  = ref("");
@@ -108,6 +110,7 @@ const loadSettings = async () => {
   addonsPath  = await store.get("gameAddonPath") ?? "";
   const stored = await store.get("gameVersion");
   gameVersion = (stored !== null && stored !== undefined) ? stored : DEFAULT_GAME_VERSION;
+  addonImages.value = (await store.get("addonImages")) ?? {};
 };
 
 const scan = async () => {
@@ -190,6 +193,9 @@ const removeAddon = async (addon) => {
   if (!yes) return;
   try {
     await invoke("remove_addon", { addonsPath, folder: addon.folder });
+    delete addonImages.value[addon.folder];
+    await store.set("addonImages", addonImages.value);
+    await store.save();
     await scan();
   } catch (e) {
     console.error("Remove error:", e);

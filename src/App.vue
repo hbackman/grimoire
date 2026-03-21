@@ -226,6 +226,16 @@ const installAddon = async (addon) => {
     // cfInstallAddon handles the CurseForge countdown via WebView download interception
     const folders = await cfInstallAddon(addon.name, gameVersion.value, addonsPath.value);
     console.log("Installed folders:", folders);
+
+    // Persist thumbnail URL so the installed view can display it
+    if (addon.image && folders?.length) {
+      const images = (await store.get("addonImages")) ?? {};
+      for (const f of folders) {
+        images[f] = addon.image;
+      }
+      await store.set("addonImages", images);
+      await store.save();
+    }
   } catch (e) {
     console.error("Install error:", e);
     alert(`Failed to install ${addon.title}:\n${e.message || e}`);
