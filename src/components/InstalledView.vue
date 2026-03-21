@@ -83,6 +83,7 @@
 import { ref, computed, onMounted } from "vue";
 import { invoke }                   from "@tauri-apps/api/core";
 import { Store }                    from "@tauri-apps/plugin-store";
+import { ask }                      from "@tauri-apps/plugin-dialog";
 import { getLatestVersion, getAddonDownloadUrl, DEFAULT_GAME_VERSION } from "@/lib/curseforge.js";
 
 import Addon from "@/components/Addon.vue";
@@ -185,7 +186,8 @@ const updateAll = async () => {
 };
 
 const removeAddon = async (addon) => {
-  if (!confirm(`Remove ${addon.title}?`)) return;
+  const yes = await ask(`Remove ${addon.title}?`, { title: "Confirm Removal", kind: "warning" });
+  if (!yes) return;
   try {
     await invoke("remove_addon", { addonsPath, folder: addon.folder });
     await scan();
