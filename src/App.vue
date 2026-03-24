@@ -105,11 +105,10 @@ import {
 } from "vue";
 
 import { Store }       from "@tauri-apps/plugin-store";
-import { invoke }      from "@tauri-apps/api/core";
 
 import {
   browse,
-  getAddonDownloadUrl,
+  installAddon as cfInstallAddon,
   DEFAULT_GAME_VERSION,
 } from "@/lib/curseforge.js";
 
@@ -230,11 +229,8 @@ const installAddon = async (addon) => {
 
   installingSlug.value = addon.name;
   try {
-    const { downloadUrl } = await getAddonDownloadUrl(addon.name, gameVersion.value);
-    const folders = await invoke("install_addon_zip", {
-      url:        downloadUrl,
-      addonsPath: addonsPath.value,
-    });
+    // cfInstallAddon handles the CurseForge countdown via WebView download interception
+    const folders = await cfInstallAddon(addon.name, gameVersion.value, addonsPath.value);
     console.log("Installed folders:", folders);
   } catch (e) {
     console.error("Install error:", e);

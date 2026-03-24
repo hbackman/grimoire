@@ -269,7 +269,12 @@ const updateAddon = async (addon) => {
   const slug = addon.folder.toLowerCase().replace(/_/g, "-");
   try {
     const { downloadUrl } = await getAddonDownloadUrl(slug, gameVersion);
-    await invoke("install_addon_zip", { url: downloadUrl, addonsPath });
+    // Use the WebView-based downloader so the 5-second CurseForge countdown
+    // fires naturally and we intercept the actual file download.
+    await invoke("download_addon_via_webview", {
+      downloadPageUrl: downloadUrl,
+      addonsPath,
+    });
     addon.updateAvailable = null;
     await scan();
   } catch (e) {

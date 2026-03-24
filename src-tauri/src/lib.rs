@@ -1,11 +1,13 @@
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::webview::DownloadEvent;
 
 // ── Scraper commands ─────────────────────────────────────────────────────────
 
@@ -285,6 +287,151 @@ fn extract_zip_bytes(bytes: &[u8], addons_path: &str) -> Result<Vec<String>, Str
     }
 
     Ok(extracted_folders.into_iter().collect())
+}
+
+/// Download an addon via the Tauri WebView's native download mechanism.
+///
+/// This navigates a hidden WebView to the CurseForge download page (which starts
+/// a 5-second countdown before triggering a file download). Tauri's `on_download`
+/// handler intercepts the download request, redirects it to a temp file, waits
+/// for completion, then extracts the zip into the AddOns directory.
+///
+/// Returns the list of top-level folders extracted.
+#[tauri::command]
+async fn download_addon_via_webview(
+    app: tauri::AppHandle,
+    download_page_url: String,
+    addons_path: String,
+) -> Result<Vec<String>, String> {
+    println!("[downloader] navigating to: {}", download_page_url);
+
+    // Shared state: the result of the download (set by on_download handler)
+    // Contains either the path to the downloaded file, or an error string.
+    // Also stores the expected destination path from the Requested event.
+    let downloaded_path: Arc<Mutex<Option<Result<PathBuf, String>>>> = Arc::new(Mutex::new(None));
+    let downloaded_path_clone = downloaded_path.clone();
+
+    // Track the expected destination path (set in Requested handler)
+    let expected_dest: Arc<Mutex<Option<PathBuf>>> = Arc::new(Mutex::new(None));
+    let expected_dest_for_handler = expected_dest.clone();
+
+    // Create (or reuse) a dedicated hidden downloader WebView.
+    // We destroy any existing one first to ensure a clean state.
+    let label = "addon-downloader";
+    if let Some(existing) = app.get_webview_window(label) {
+        let _ = existing.destroy();
+        // Small delay to let it fully close
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    // Temp directory for the download
+    let temp_dir = std::env::temp_dir().join("grimoire-downloads");
+    fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+    let temp_dir_clone = temp_dir.clone();
+
+    let _win = WebviewWindowBuilder::new(
+        &app,
+        label,
+        WebviewUrl::External(download_page_url.parse().map_err(|e: url::ParseError| e.to_string())?),
+    )
+    .visible(false)
+    .title("Addon Downloader")
+    .on_download(move |_webview, event| {
+        match event {
+            DownloadEvent::Requested { url, destination } => {
+                println!("[downloader] download requested: {}", url);
+                // Redirect to our temp directory
+                let file_name = url
+                    .path_segments()
+                    .and_then(|s| s.last())
+                    .unwrap_or("addon.zip")
+                    .to_string();
+                let dest = temp_dir_clone.join(&file_name);
+                *destination = dest.clone();
+                // Store the expected destination so we can find it even on macOS
+                // where the Finished event doesn't include the path.
+                {
+                    let mut ed = expected_dest_for_handler.lock().unwrap();
+                    *ed = Some(dest.clone());
+                }
+                println!("[downloader] saving to: {:?}", dest);
+                true // allow download
+            }
+            DownloadEvent::Finished { url: _, path, success } => {
+                println!("[downloader] download finished, success={}, path={:?}", success, path);
+                let mut guard = downloaded_path_clone.lock().unwrap();
+                if success {
+                    // Use the provided path if available; fall back to expected_dest
+                    // (macOS always returns None for path due to API limitations)
+                    if let Some(p) = path {
+                        *guard = Some(Ok(p.to_path_buf()));
+                    } else {
+                        // Signal success with an empty PathBuf — the caller will
+                        // look up the expected destination via `expected_dest`.
+                        *guard = Some(Ok(PathBuf::new()));
+                    }
+                } else {
+                    *guard = Some(Err("Download failed (WebView reported failure)".to_string()));
+                }
+            }
+            _ => {}
+        }
+        true
+    })
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    // Poll for up to 60 seconds (5s countdown + download time)
+    let timeout = Duration::from_secs(60);
+    let poll_interval = Duration::from_millis(500);
+    let start = std::time::Instant::now();
+
+    loop {
+        tokio::time::sleep(poll_interval).await;
+
+        let result = {
+            let guard = downloaded_path.lock().unwrap();
+            guard.clone()
+        };
+
+        if let Some(res) = result {
+            // Clean up the downloader WebView
+            if let Some(win) = app.get_webview_window(label) {
+                let _ = win.destroy();
+            }
+
+            let mut path = res?;
+
+            // macOS: path may be empty PathBuf — resolve from expected_dest
+            if path.as_os_str().is_empty() {
+                let ed = expected_dest.lock().unwrap();
+                match ed.as_ref() {
+                    Some(p) => path = p.clone(),
+                    None => return Err("Download path not recorded".to_string()),
+                }
+            }
+
+            println!("[downloader] extracting zip from {:?}", path);
+
+            // Read file bytes and extract
+            let bytes = fs::read(&path).map_err(|e| format!("Failed to read downloaded file {:?}: {}", path, e))?;
+            let folders = extract_zip_bytes(&bytes, &addons_path)?;
+
+            // Clean up temp file
+            let _ = fs::remove_file(&path);
+
+            println!("[downloader] extracted folders: {:?}", folders);
+            return Ok(folders);
+        }
+
+        if start.elapsed() > timeout {
+            // Clean up
+            if let Some(win) = app.get_webview_window(label) {
+                let _ = win.destroy();
+            }
+            return Err("Download timed out after 60 seconds".to_string());
+        }
+    }
 }
 
 /// Remove an addon folder from the AddOns directory.
@@ -660,6 +807,7 @@ pub fn run() {
             scan_addons,
             validate_wow_path,
             install_addon_zip,
+            download_addon_via_webview,
             remove_addon,
             create_test_addon_dir,
             // Post-MVP: disable/enable
