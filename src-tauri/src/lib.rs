@@ -334,7 +334,9 @@ async fn download_addon_via_webview(
         label,
         WebviewUrl::External(download_page_url.parse().map_err(|e: url::ParseError| e.to_string())?),
     )
-    .visible(false)
+    .visible(true)
+    .inner_size(1.0, 1.0)
+    .position(-10000.0, -10000.0)
     .title("Addon Downloader")
     .on_download(move |_webview, event| {
         match event {
@@ -355,7 +357,6 @@ async fn download_addon_via_webview(
                     *ed = Some(dest.clone());
                 }
                 println!("[downloader] saving to: {:?}", dest);
-                true // allow download
             }
             DownloadEvent::Finished { url: _, path, success } => {
                 println!("[downloader] download finished, success={}, path={:?}", success, path);
