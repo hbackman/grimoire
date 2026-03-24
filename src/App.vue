@@ -59,7 +59,8 @@
             :author="addon.author"
             :title="addon.title"
             :description="addon.description"
-            :on-install="addonsPath ? () => installAddon(addon) : null"
+            :is-installed="installedSlugs.has(addon.name)"
+            :on-install="addonsPath && !installedSlugs.has(addon.name) ? () => installAddon(addon) : null"
             :class="[
               'mb-3',
               installingSlug === addon.name ? 'opacity-60 pointer-events-none' : '',
@@ -127,6 +128,7 @@ const loadingMore    = ref(false);
 const currentPage    = ref(1);
 const hasMoreResults = ref(true);
 const installingSlug = ref(null);
+const installedSlugs = ref(new Set());
 
 const addonsPath  = ref("");
 const gameVersion = ref(DEFAULT_GAME_VERSION);
@@ -145,6 +147,9 @@ const loadSettings = async () => {
   gameVersion.value = (storedVersion !== null && storedVersion !== undefined)
     ? storedVersion
     : DEFAULT_GAME_VERSION;
+
+  const manifest = (await store.get("addonManifest")) ?? {};
+  installedSlugs.value = new Set(Object.keys(manifest));
 };
 
 const onSettingsBack = async () => {
@@ -207,9 +212,14 @@ watch(search, () => {
   debounceTimer = setTimeout(() => performSearch(true), 300);
 });
 
-watch(mainView, (v) => {
+watch(mainView, async (v) => {
   if (v === "installed") {
     installedView.value?.refresh();
+  }
+  if (v === "browse") {
+    // Refresh installed slugs in case addons were removed on the installed tab
+    const manifest = (await store.get("addonManifest")) ?? {};
+    installedSlugs.value = new Set(Object.keys(manifest));
   }
 });
 
@@ -227,14 +237,18 @@ const installAddon = async (addon) => {
     const folders = await cfInstallAddon(addon.name, gameVersion.value, addonsPath.value);
     console.log("Installed folders:", folders);
 
-    // Persist thumbnail URL so the installed view can display it
-    if (addon.image && folders?.length) {
-      const images = (await store.get("addonImages")) ?? {};
-      for (const f of folders) {
-        images[f] = addon.image;
-      }
-      await store.set("addonImages", images);
+    // Persist addon manifest so installed view shows one entry per addon
+    if (folders?.length) {
+      const manifest = (await store.get("addonManifest")) ?? {};
+      manifest[addon.name] = {
+        slug:    addon.name,
+        title:   addon.title,
+        image:   addon.image || "",
+        folders: folders,
+      };
+      await store.set("addonManifest", manifest);
       await store.save();
+      installedSlugs.value = new Set(Object.keys(manifest));
     }
   } catch (e) {
     console.error("Install error:", e);

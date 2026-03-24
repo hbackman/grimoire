@@ -63,11 +63,11 @@
     <template v-else>
       <Addon
         v-for="addon in addons"
-        :key="addon.folder"
+        :key="addon.slug"
         :installed="true"
-        :image="addonImages[addon.folder]"
+        :image="addon.image"
         :title="addon.title"
-        :folder="addon.folder"
+        :folder="addon.slug"
         :version="addon.version"
         :notes="addon.notes"
         :author="addon.author"
@@ -92,7 +92,6 @@ import Addon from "@/components/Addon.vue";
 const emit = defineEmits(["refresh"]);
 
 const addons          = ref([]);
-const addonImages     = ref({});
 const checkingUpdates = ref(false);
 const updatingAll     = ref(false);
 const updateProgress  = ref("");
@@ -110,16 +109,43 @@ const loadSettings = async () => {
   addonsPath  = await store.get("gameAddonPath") ?? "";
   const stored = await store.get("gameVersion");
   gameVersion = (stored !== null && stored !== undefined) ? stored : DEFAULT_GAME_VERSION;
-  addonImages.value = (await store.get("addonImages")) ?? {};
 };
 
 const scan = async () => {
   if (!addonsPath) return;
   try {
-    const result = await invoke("scan_addons", { path: addonsPath });
-    addons.value = result;
+    // Get manifest (slug -> { slug, title, image, folders })
+    const manifest = (await store.get("addonManifest")) ?? {};
+
+    // Scan filesystem for version/author/notes from .toc files
+    const scanned = await invoke("scan_addons", { path: addonsPath });
+    const scannedMap = {};
+    for (const a of scanned) {
+      scannedMap[a.folder] = a;
+    }
+
+    // Build one entry per manifest addon, using primary folder's .toc data
+    addons.value = Object.values(manifest)
+      .map(entry => {
+        const primary = scannedMap[entry.folders[0]];
+        return {
+          slug:    entry.slug,
+          title:   entry.title,
+          image:   entry.image,
+          folders: entry.folders,
+          version: primary?.version ?? "",
+          notes:   primary?.notes ?? "",
+          author:  primary?.author ?? "",
+          updateAvailable: null,
+        };
+      })
+      .filter(a => {
+        // Only show addons whose primary folder still exists on disk
+        return scannedMap[a.folders?.[0]];
+      })
+      .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
   } catch (e) {
-    console.error("scan_addons error:", e);
+    console.error("scan error:", e);
   }
 };
 
@@ -129,11 +155,8 @@ const checkUpdates = async () => {
   updateProgress.value  = "Checking for updates…";
 
   try {
-    // We don't have a mapping from folder name → curseforge slug automatically.
-    // This is a known limitation. We check by trying the lowercase folder name
-    // as a slug — works for most popular addons (WeakAuras, Details, ElvUI…)
     const checks = addons.value.map(async (addon) => {
-      const slug    = addon.folder.toLowerCase().replace(/_/g, "-");
+      const slug    = addon.slug;
       const latest  = await getLatestVersion(slug, gameVersion).catch(() => null);
       if (latest && latest !== addon.version) {
         addon.updateAvailable = latest;
@@ -157,7 +180,7 @@ const checkUpdates = async () => {
 };
 
 const updateAddon = async (addon) => {
-  const slug = addon.folder.toLowerCase().replace(/_/g, "-");
+  const slug = addon.slug;
   try {
     const { downloadUrl } = await getAddonDownloadUrl(slug, gameVersion);
     // Use the WebView-based downloader so the 5-second CurseForge countdown
@@ -192,9 +215,14 @@ const removeAddon = async (addon) => {
   const yes = await ask(`Remove ${addon.title}?`, { title: "Confirm Removal", kind: "warning" });
   if (!yes) return;
   try {
-    await invoke("remove_addon", { addonsPath, folder: addon.folder });
-    delete addonImages.value[addon.folder];
-    await store.set("addonImages", addonImages.value);
+    // Remove all folders belonging to this addon
+    for (const folder of addon.folders) {
+      await invoke("remove_addon", { addonsPath, folder });
+    }
+    // Remove from manifest
+    const manifest = (await store.get("addonManifest")) ?? {};
+    delete manifest[addon.slug];
+    await store.set("addonManifest", manifest);
     await store.save();
     await scan();
   } catch (e) {

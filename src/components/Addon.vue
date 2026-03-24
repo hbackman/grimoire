@@ -65,9 +65,18 @@
 
     <!-- Action buttons -->
     <div class="flex flex-col gap-1.5 shrink-0 ml-1">
+      <!-- Installed badge (search results, already installed) -->
+      <span
+        v-if="!installed && isInstalled"
+        class="px-3 py-1.5 text-xs font-medium text-green-600 bg-green-50 rounded-lg
+               dark:text-green-400 dark:bg-green-900/30 whitespace-nowrap"
+      >
+        Installed
+      </span>
+
       <!-- Install button (search results) -->
       <button
-        v-if="!installed && onInstall"
+        v-else-if="!installed && onInstall"
         @click.stop="onInstall()"
         :disabled="installing"
         class="px-3 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-lg
@@ -115,6 +124,9 @@ const props = defineProps({
   title:       String,
   description: String,
   author:      String,
+
+  // Browse results
+  isInstalled:     Boolean,
 
   // Installed addons
   installed:       Boolean,
