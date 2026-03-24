@@ -83,10 +83,7 @@
                hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed
                transition-all duration-200 whitespace-nowrap flex items-center gap-1.5 cursor-pointer"
       >
-        <svg v-if="installing" class="h-3 w-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-        </svg>
+        <Spinner v-if="installing" />
         <span>{{ installing ? 'Installing…' : 'Install' }}</span>
       </button>
 
@@ -107,8 +104,9 @@
       <button
         v-if="installed && onRemove"
         @click.stop="onRemove()"
+        :disabled="disabled"
         class="px-3 py-1.5 text-xs font-medium text-zinc-500 bg-zinc-100 rounded-lg
-               hover:bg-zinc-200 hover:text-zinc-700
+               hover:bg-zinc-200 hover:text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed
                dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-300
                transition-all duration-200 whitespace-nowrap"
       >
@@ -120,6 +118,7 @@
 
 <script setup>
 import { ref, defineProps } from "vue";
+import Spinner from "@/components/Spinner.vue";
 
 const props = defineProps({
   // Common
@@ -138,6 +137,9 @@ const props = defineProps({
   version:         String,
   notes:           String,
   updateAvailable: String,
+
+  // State
+  disabled:  Boolean,
 
   // Callbacks
   onInstall: Function,

@@ -19,10 +19,10 @@
           class="px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 rounded-lg
                  hover:bg-zinc-50 hover:border-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed
                  dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 dark:hover:bg-zinc-700
-                 transition-all duration-200"
+                 transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
         >
-          <span v-if="checkingUpdates">Checking…</span>
-          <span v-else>Check for Updates</span>
+          <Spinner v-if="checkingUpdates" />
+          <span>{{ checkingUpdates ? 'Checking…' : 'Check for Updates' }}</span>
         </button>
 
         <button
@@ -39,12 +39,24 @@
       </div>
     </div>
 
-    <!-- Update progress -->
+    <!-- Update-all progress -->
     <div
-      v-if="updateProgress"
+      v-if="updatingAll && updateProgress"
       class="mb-3 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 rounded-lg"
     >
       {{ updateProgress }}
+    </div>
+
+    <!-- All up to date -->
+    <div
+      v-if="allUpToDate"
+      class="mb-3 flex items-center gap-2 px-3 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg
+             dark:text-emerald-400 dark:bg-emerald-900/20 dark:border-emerald-800"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+      </svg>
+      All addons are up to date
     </div>
 
     <!-- Empty state -->
@@ -72,6 +84,7 @@
         :notes="addon.notes"
         :author="addon.author"
         :update-available="addon.updateAvailable"
+        :disabled="checkingUpdates"
         :on-remove="() => removeAddon(addon)"
         :on-update="addon.updateAvailable ? () => updateAddon(addon) : null"
         class="mb-3"
@@ -87,7 +100,8 @@ import { Store }                    from "@tauri-apps/plugin-store";
 import { ask }                      from "@tauri-apps/plugin-dialog";
 import { getLatestVersion, getAddonDownloadUrl, DEFAULT_GAME_VERSION } from "@/lib/curseforge.js";
 
-import Addon from "@/components/Addon.vue";
+import Addon   from "@/components/Addon.vue";
+import Spinner from "@/components/Spinner.vue";
 
 const emit = defineEmits(["refresh"]);
 
@@ -95,6 +109,7 @@ const addons          = ref([]);
 const checkingUpdates = ref(false);
 const updatingAll     = ref(false);
 const updateProgress  = ref("");
+const allUpToDate     = ref(false);
 
 let store       = null;
 let addonsPath  = "";
@@ -153,7 +168,7 @@ const scan = async () => {
 const checkUpdates = async () => {
   if (!addons.value.length) return;
   checkingUpdates.value = true;
-  updateProgress.value  = "Checking for updates…";
+  allUpToDate.value     = false;
 
   try {
     const checks = addons.value.map(async (addon) => {
@@ -174,10 +189,7 @@ const checkUpdates = async () => {
       await check;
     }
 
-    const count = addonsWithUpdates.value.length;
-    updateProgress.value = count
-      ? `${count} update${count !== 1 ? "s" : ""} available`
-      : "All addons are up to date";
+    allUpToDate.value = addonsWithUpdates.value.length === 0;
   } finally {
     checkingUpdates.value = false;
   }
@@ -221,8 +233,8 @@ const updateAll = async () => {
     await updateAddon(addon);
   }
 
-  updateProgress.value = "All updates complete!";
-  updatingAll.value    = false;
+  updatingAll.value = false;
+  allUpToDate.value = true;
 };
 
 const removeAddon = async (addon) => {
