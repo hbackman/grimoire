@@ -15,10 +15,14 @@ Grimoire is a free, open-source desktop app that makes managing your addons simp
 ## Getting Started
 
 1. Download the latest release for your platform
-2. Open Grimoire and go to **Settings**
-3. Point it to your WoW `Interface/AddOns` folder (e.g. `/Applications/World of Warcraft/_classic_era_/Interface/AddOns`)
-4. Select your game version
-5. Search for addons and hit **Install**
+2. **macOS only** — the app is not code-signed yet, so macOS will block it. After downloading, open Terminal and run:
+   ```sh
+   xattr -cr /Applications/grimoire.app
+   ```
+3. Open Grimoire and go to **Settings**
+4. Point it to your WoW `Interface/AddOns` folder (e.g. `/Applications/World of Warcraft/_classic_era_/Interface/AddOns`)
+5. Select your game version
+6. Search for addons and hit **Install**
 
 ## Development
 
