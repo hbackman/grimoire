@@ -187,11 +187,26 @@ export async function getAddonDownloadUrl(addonSlug, gameVersionTypeId) {
 
 /**
  * Install an addon by slug into the given AddOns directory.
+ *
+ * CurseForge download pages have a 5-second countdown before the actual file
+ * download starts. We use `download_addon_via_webview` which opens a hidden
+ * WebView, navigates to the download page, and intercepts the file download
+ * via Tauri's native download event API. This avoids the need to reverse-engineer
+ * the direct CDN URL.
+ *
  * Returns the list of folders extracted.
  */
 export async function installAddon(addonSlug, gameVersionTypeId, addonsPath) {
   const { downloadUrl } = await getAddonDownloadUrl(addonSlug, gameVersionTypeId);
-  return await invoke("install_addon_zip", { url: downloadUrl, addonsPath });
+
+  // downloadUrl is typically a CurseForge download page URL like:
+  // https://www.curseforge.com/wow/addons/<slug>/download/<fileId>
+  // We navigate the hidden WebView to this page; Tauri intercepts the resulting
+  // file download (triggered by the 5s countdown) and extracts it automatically.
+  return await invoke("download_addon_via_webview", {
+    downloadPageUrl: downloadUrl,
+    addonsPath,
+  });
 }
 
 /**
