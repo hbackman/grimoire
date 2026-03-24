@@ -59,7 +59,7 @@
         </p>
 
         <!-- Dev helper: create test dir -->
-        <div class="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+        <div v-if="isDev" class="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
           <p class="text-xs text-zinc-400 dark:text-zinc-600 mb-2">Developer: create a test AddOns directory</p>
           <div class="flex gap-2">
             <input
@@ -149,6 +149,7 @@ const gameVersion     = ref(DEFAULT_GAME_VERSION);
 const gameVersions    = ref(versions());
 const pathValidation  = ref("");
 const pathValid       = ref(false);
+const isDev           = import.meta.env.DEV;
 const testDirBase     = ref("/tmp");
 const testDirResult   = ref("");
 
