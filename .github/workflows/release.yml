@@ -48,6 +48,6 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Grimoire ${{ github.ref_name }}"
           releaseBody: ""
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
