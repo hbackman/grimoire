@@ -212,5 +212,8 @@ onMounted(async () => {
   if (storedVersion !== null && storedVersion !== undefined)
     gameVersion.value = storedVersion;
   if (gameAddonPath.value) validatePath(gameAddonPath.value);
+
+  // Use cached versions (populated at app boot)
+  gameVersions.value = versions();
 });
 </script>

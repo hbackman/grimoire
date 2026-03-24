@@ -223,14 +223,88 @@ export async function getLatestVersion(addonSlug, gameVersionTypeId) {
   }
 }
 
+/**
+ * Hardcoded fallback in case scraping fails.
+ */
+const FALLBACK_VERSIONS = [
+  { label: "Classic Era (1.x)",     value: 67408 },
+  { label: "Cataclysm Classic",     value: 73246 },
+  { label: "MoP Classic",           value: 79434 },
+  { label: "Retail",                value: 517   },
+];
+
+/**
+ * Extract game version filter options from a CurseForge files page.
+ * Looks for links or options containing gameVersionTypeId in the HTML.
+ */
+export function extractGameVersions(html) {
+  const root = parse(html);
+  const versions = [];
+  const seen = new Set();
+
+  // Look for links with gameVersionTypeId in href
+  for (const el of root.querySelectorAll("a[href]")) {
+    const href = el.getAttribute("href") || "";
+    const match = href.match(/gameVersionTypeId=(\d+)/);
+    if (match) {
+      const value = parseInt(match[1], 10);
+      if (!seen.has(value)) {
+        seen.add(value);
+        versions.push({ label: el.text.trim(), value });
+      }
+    }
+  }
+
+  // Also look for <option> elements with gameVersionTypeId values
+  if (versions.length === 0) {
+    for (const el of root.querySelectorAll("option[value]")) {
+      const val = el.getAttribute("value") || "";
+      const match = val.match(/gameVersionTypeId=(\d+)/) || (val.match(/^\d+$/) ? [null, val] : null);
+      if (match) {
+        const value = parseInt(match[1], 10);
+        if (!seen.has(value) && value > 0) {
+          seen.add(value);
+          versions.push({ label: el.text.trim(), value });
+        }
+      }
+    }
+  }
+
+  return versions;
+}
+
+let cachedVersions = null;
+
+/**
+ * Fetch available game versions by scraping a CurseForge addon files page.
+ * Results are cached for the session. Falls back to hardcoded list on failure.
+ */
+export async function fetchGameVersions() {
+  if (cachedVersions) return cachedVersions;
+
+  try {
+    // Use a popular addon that will always have files across all game versions
+    const data = await scrape(
+      "https://www.curseforge.com/wow/addons/weakauras-2/files/all"
+    );
+    const versions = extractGameVersions(data.html);
+    if (versions.length > 0) {
+      cachedVersions = versions;
+      return versions;
+    }
+  } catch {
+    // Fall through to fallback
+  }
+
+  cachedVersions = FALLBACK_VERSIONS;
+  return cachedVersions;
+}
+
+/**
+ * Synchronous fallback for immediate use before async fetch completes.
+ */
 export function versions() {
-  return [
-    // Classic variants listed first — this is a Classic addon manager
-    { label: "Classic Era (1.x)",     value: 67408 },
-    { label: "Cataclysm Classic",     value: 73246 },
-    { label: "MoP Classic",           value: 79434 },
-    { label: "Retail",                value: 517   },
-  ];
+  return cachedVersions || FALLBACK_VERSIONS;
 }
 
 /**

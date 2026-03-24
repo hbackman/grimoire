@@ -104,6 +104,7 @@ import {
   browse,
   installAddon as cfInstallAddon,
   getLatestVersion,
+  fetchGameVersions,
   DEFAULT_GAME_VERSION,
 } from "@/lib/curseforge.js";
 
@@ -265,6 +266,7 @@ const installAddon = async (addon) => {
 
 onMounted(async () => {
   await loadSettings();
+  fetchGameVersions();  // warm the cache; don't await — runs in background
   performSearch(true);
   window.addEventListener("scroll", handleScroll);
 });
