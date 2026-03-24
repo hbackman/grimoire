@@ -508,6 +508,15 @@ pub fn run() {
             remove_addon,
             create_test_addon_dir,
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // When the main window is closed, exit the entire app
+                // (hidden scraper/downloader windows would otherwise keep it alive)
+                if window.label() == "main" {
+                    window.app_handle().exit(0);
+                }
+            }
+        })
         .setup(|_app| {
             Ok(())
         })
