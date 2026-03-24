@@ -3,7 +3,7 @@
     class="flex items-start gap-3 rounded-xl bg-white p-3 shadow ring-1 ring-black/5
            dark:bg-zinc-900 dark:ring-white/10
            transition-all duration-200 ease-in-out"
-    :class="{ 'cursor-pointer hover:ring-2 hover:ring-blue-500': !installed }"
+    :class="{ 'hover:ring-2 hover:ring-blue-500': !installed }"
   >
     <!-- Addon image (only for search results) -->
     <img
@@ -81,10 +81,13 @@
         :disabled="installing"
         class="px-3 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-lg
                hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed
-               transition-all duration-200 whitespace-nowrap"
+               transition-all duration-200 whitespace-nowrap flex items-center gap-1.5 cursor-pointer"
       >
-        <span v-if="installing">Installing…</span>
-        <span v-else>Install</span>
+        <svg v-if="installing" class="h-3 w-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        <span>{{ installing ? 'Installing…' : 'Install' }}</span>
       </button>
 
       <!-- Update button (installed with update) -->
@@ -127,6 +130,7 @@ const props = defineProps({
 
   // Browse results
   isInstalled:     Boolean,
+  installing:      Boolean,
 
   // Installed addons
   installed:       Boolean,
@@ -142,6 +146,5 @@ const props = defineProps({
 });
 
 const imageError  = ref(false);
-const installing  = ref(false);
 const updating    = ref(false);
 </script>

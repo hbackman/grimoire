@@ -133,6 +133,7 @@ const scan = async () => {
           title:   entry.title,
           image:   entry.image,
           folders: entry.folders,
+          cfVersion: entry.cfVersion || "",
           version: primary?.version ?? "",
           notes:   primary?.notes ?? "",
           author:  primary?.author ?? "",
@@ -158,7 +159,10 @@ const checkUpdates = async () => {
     const checks = addons.value.map(async (addon) => {
       const slug    = addon.slug;
       const latest  = await getLatestVersion(slug, gameVersion).catch(() => null);
-      if (latest && latest !== addon.version) {
+      // Compare against the CurseForge version stored at install/update time,
+      // not the .toc version (which uses a different format).
+      const installed = addon.cfVersion || addon.version;
+      if (latest && latest !== installed) {
         addon.updateAvailable = latest;
       } else {
         addon.updateAvailable = null;
@@ -182,13 +186,23 @@ const checkUpdates = async () => {
 const updateAddon = async (addon) => {
   const slug = addon.slug;
   try {
-    const { downloadUrl } = await getAddonDownloadUrl(slug, gameVersion);
+    const { downloadUrl, version: cfVersion } = await getAddonDownloadUrl(slug, gameVersion);
     // Use the WebView-based downloader so the 5-second CurseForge countdown
     // fires naturally and we intercept the actual file download.
-    await invoke("download_addon_via_webview", {
+    const folders = await invoke("download_addon_via_webview", {
       downloadPageUrl: downloadUrl,
       addonsPath,
     });
+
+    // Update manifest with new CurseForge version and folders
+    const manifest = (await store.get("addonManifest")) ?? {};
+    if (manifest[slug]) {
+      if (cfVersion) manifest[slug].cfVersion = cfVersion;
+      if (folders?.length) manifest[slug].folders = folders;
+      await store.set("addonManifest", manifest);
+      await store.save();
+    }
+
     addon.updateAvailable = null;
     await scan();
   } catch (e) {

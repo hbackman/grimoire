@@ -60,11 +60,9 @@
             :title="addon.title"
             :description="addon.description"
             :is-installed="installedSlugs.has(addon.name)"
+            :installing="installingSlug === addon.name"
             :on-install="addonsPath && !installedSlugs.has(addon.name) ? () => installAddon(addon) : null"
-            :class="[
-              'mb-3',
-              installingSlug === addon.name ? 'opacity-60 pointer-events-none' : '',
-            ]"
+            class="mb-3"
           />
 
           <!-- Loading more -->
@@ -105,6 +103,7 @@ import { Store }       from "@tauri-apps/plugin-store";
 import {
   browse,
   installAddon as cfInstallAddon,
+  getLatestVersion,
   DEFAULT_GAME_VERSION,
 } from "@/lib/curseforge.js";
 
@@ -239,12 +238,16 @@ const installAddon = async (addon) => {
 
     // Persist addon manifest so installed view shows one entry per addon
     if (folders?.length) {
+      // Fetch the CurseForge version so we can detect updates later
+      const cfVersion = await getLatestVersion(addon.name, gameVersion.value).catch(() => null);
+
       const manifest = (await store.get("addonManifest")) ?? {};
       manifest[addon.name] = {
         slug:    addon.name,
         title:   addon.title,
         image:   addon.image || "",
         folders: folders,
+        cfVersion: cfVersion || "",
       };
       await store.set("addonManifest", manifest);
       await store.save();
