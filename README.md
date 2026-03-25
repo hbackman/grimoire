@@ -14,6 +14,8 @@ Grimoire is a free, open-source desktop app that makes managing your addons simp
 
 ## Getting Started
 
+> **Supported platforms:** macOS and Windows only. Linux is not officially supported or distributed — WoW on Linux requires Wine and is not a use case we target.
+
 1. Download the latest release for your platform
 2. **macOS only** — the app is not code-signed yet, so macOS will block it. After downloading, open Terminal and run:
    ```sh
