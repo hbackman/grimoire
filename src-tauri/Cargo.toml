@@ -28,6 +28,8 @@ scraper = "0.24.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tauri-plugin-store = "2.4.0"
 tauri-plugin-dialog = "2.4.0"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 zip = "2"
 
 # Unit tests live in the `addon-core` workspace crate (no system deps required).

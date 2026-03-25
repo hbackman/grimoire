@@ -9,6 +9,23 @@
   <div v-else>
     <main class="p-4" style="max-width: 540px; margin: 0 auto;">
 
+      <!-- Update available banner -->
+      <div
+        v-if="updateAvailable"
+        class="mb-4 p-4 rounded-xl bg-blue-50 ring-1 ring-blue-200 dark:bg-blue-900/20 dark:ring-blue-700/50"
+      >
+        <p class="text-sm font-medium text-blue-800 dark:text-blue-300">
+          A new version ({{ updateAvailable.version }}) is available.
+        </p>
+        <button
+          @click="installUpdate"
+          :disabled="updating"
+          class="mt-2 px-3 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-all duration-200"
+        >
+          {{ updating ? "Updating..." : "Update & Restart" }}
+        </button>
+      </div>
+
       <!-- First-run banner: no WoW path configured -->
       <div
         v-if="!addonsPath"
@@ -99,6 +116,8 @@ import {
 } from "vue";
 
 import { Store }       from "@tauri-apps/plugin-store";
+import { check }       from "@tauri-apps/plugin-updater";
+import { relaunch }    from "@tauri-apps/plugin-process";
 
 import {
   browse,
@@ -132,6 +151,8 @@ const installedSlugs = ref(new Set());
 
 const addonsPath  = ref("");
 const gameVersion = ref(DEFAULT_GAME_VERSION);
+const updateAvailable = ref(null); // holds the update object if available
+const updating        = ref(false);
 
 const installedView = ref(null); // ref to InstalledView component
 
@@ -262,12 +283,38 @@ const installAddon = async (addon) => {
   }
 };
 
+// ── Auto-update ─────────────────────────────────────────────────────────────
+
+const checkForUpdate = async () => {
+  try {
+    const update = await check();
+    if (update?.available) {
+      updateAvailable.value = update;
+    }
+  } catch (e) {
+    console.error("Update check failed:", e);
+  }
+};
+
+const installUpdate = async () => {
+  if (!updateAvailable.value) return;
+  updating.value = true;
+  try {
+    await updateAvailable.value.downloadAndInstall();
+    await relaunch();
+  } catch (e) {
+    console.error("Update install failed:", e);
+    updating.value = false;
+  }
+};
+
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 
 onMounted(async () => {
   await loadSettings();
   fetchGameVersions();  // warm the cache; don't await — runs in background
   performSearch(true);
+  checkForUpdate();     // silent update check
   window.addEventListener("scroll", handleScroll);
 });
 
