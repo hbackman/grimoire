@@ -145,7 +145,7 @@ The update-check in `InstalledView.vue` guesses the CurseForge slug by lowercasi
 The full install flow (search → install) depends on the CurseForge scraper correctly extracting a direct download URL from their file detail pages. CurseForge's HTML structure changes occasionally, so this may need updating. The scraper infrastructure is in place; `extractDirectDownloadUrl` and `extractLatestFileUrl` may need tweaking once tested against live pages.
 
 ### `cargo build` (linking) blocked by environment
-`cargo check` passes — all Rust code is type-correct. However, `cargo build` (full compile + link) requires the webkit2gtk-4.1 and libsoup-3.0 **runtime** shared libraries (`libwebkit2gtk-4.1.so.0`, `libsoup-3.0.so.0`) to be installed on the build host. These are not present in the CI/sandbox environment (the dev packages were manually extracted to work around the missing `apt` access, but the runtime `.so` files themselves were never installed). On a proper Linux dev machine with `libwebkit2gtk-4.1-dev` and `libsoup-3.0-dev` installed via apt, `cargo build` will succeed.
+`cargo check` passes — all Rust code is type-correct. However, `cargo build` (full compile + link) in the current sandbox environment is missing the required Tauri/WebKit runtime libraries. On a proper macOS or Windows dev machine with the standard Tauri prerequisites installed, `cargo build` will succeed. (Note: Linux is not an officially distributed/supported platform for Grimoire — WoW via Wine is unsupported — though the code can still compile on Linux.)
 
 ### Multi-folder addons
 Some CurseForge addons extract multiple folders (e.g. ElvUI + ElvUI_Options). `install_addon_zip` handles this correctly at the extraction level, but the UI doesn't group them or track the relationship.
@@ -154,7 +154,7 @@ Some CurseForge addons extract multiple folders (e.g. ElvUI + ElvUI_Options). `i
 
 ## How to Test
 
-1. Build requires Linux with Tauri deps: `sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev`
+1. Install [Tauri prerequisites](https://tauri.app/start/prerequisites/) for macOS or Windows
 2. Run `cargo build` in `src-tauri/`
 3. `bun install && bun run tauri dev` from the root
 4. In Settings → use "Create" under dev section to generate test addons at e.g. `/tmp`
