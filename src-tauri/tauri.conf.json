@@ -36,7 +36,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFDRDNCNDRDQzgyRDcwMUEKUldRYWNDM0lUTFRUckZCK0RyYmZkQmtEN3hPSlYwMGNtSGtiVzVlbkFlR1hZTHpaUml0ZFFKMSsK",
       "endpoints": [
         "https://github.com/hbackman/grimoire/releases/latest/download/latest.json"
       ]
