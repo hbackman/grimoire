@@ -334,7 +334,7 @@ async fn download_addon_via_webview(
         label,
         WebviewUrl::External(download_page_url.parse().map_err(|e: url::ParseError| e.to_string())?),
     )
-    .visible(true)
+    .visible(cfg!(target_os = "macos"))
     .inner_size(1.0, 1.0)
     .position(-10000.0, -10000.0)
     .title("Addon Downloader")
